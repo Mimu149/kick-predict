@@ -61,7 +61,7 @@ def collect_fixtures(api, odds_rows):
         log(f"football-data.org: {len(fdm)} Spiele")
     for o in odds_rows:
         if o["date"] >= NOW.date() - timedelta(days=0) and o["date"] <= NOW.date() + timedelta(days=DAYS_AHEAD):
-            raw.append({"comp": o["comp"], "kickoff": _csv_kickoff(o["date"]), "home": o["home"],
+            raw.append({"comp": o["comp"], "kickoff": _csv_kickoff(o["date"], o.get("time")), "home": o["home"],
                         "away": o["away"], "src": "football-data.co.uk", "csvOdds": o["odds"]})
     return raw
 

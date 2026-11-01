@@ -145,5 +145,5 @@ def _odds_row(r):
         odds["AH"] = {"line": float(ahh),
                       "home": _num(r, "AvgAHH", "B365AHH", "PAHH", "MaxAHH"),
                       "away": _num(r, "AvgAHA", "B365AHA", "PAHA", "MaxAHA")}
-    return {"comp": comp, "date": d, "home": home.strip(), "away": away.strip(),
+    return {"comp": comp, "date": d, "time": r.get("Time"), "home": home.strip(), "away": away.strip(),
             "odds": {k: v for k, v in odds.items() if v}}
