@@ -15,7 +15,7 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import stats as st  # noqa: E402
-from config import ALL_COMPS, CUPS, DAYS_AHEAD, DERBIES, LEAGUES, MODEL, VALUE  # noqa: E402
+from config import ALL_COMPS, CUPS, DAYS_AHEAD, DERBIES, LEAGUE_STRENGTH, LEAGUES, MODEL, VALUE  # noqa: E402
 from history import load_fixture_odds, load_history  # noqa: E402
 from model import LeagueModel, ah_prob, elo_expect, markets, score_matrix, supremacy_from_expect  # noqa: E402
 from sources import ApiFootball, clubelo, fd_matches  # noqa: E402
@@ -251,8 +251,29 @@ def main(offline=False):
                 rec["teams"] = blocks
             if dn:
                 lh *= math.exp(-0.25 * MODEL["derby_home_adv_cut"])
+        elif comp in CUPS and h and a and h["comp"] in models and a["comp"] in models \
+                and models[h["comp"]].has(hname) and models[a["comp"]].has(aname):
+            # Ersatz ohne Elo: Liga-Modelle + Ligastärke
+            mh, ma = models[h["comp"]], models[a["comp"]]
+            oh, oa = LEAGUE_STRENGTH.get(h["comp"], -0.3), LEAGUE_STRENGTH.get(a["comp"], -0.3)
+            mu = (mh.mu + ma.mu) / 2
+            ih, ia = mh.idx[hname], ma.idx[aname]
+            ha = 0.6 * mh.home_adv(hname)
+            lh = math.exp(mu + ha + mh.att[ih] + oh + ma.dfn[ia] - oa)
+            la = math.exp(mu + ma.att[ia] + oa + mh.dfn[ih] - oh)
+            rec["model"] = "Liga-Modelle + Ligastärke"
+            notes.append("Europapokal: Schätzung über Liga-Modelle (ClubElo nicht verfügbar)")
+            blocks = {}
+            for side, nm, c in (("home", hname, h["comp"]), ("away", aname, a["comp"])):
+                df = hist[hist["comp"] == c]
+                blocks[side] = _side_block(df, nm, cur, tables.get(c))
+                blocks[side]["league"] = LEAGUES[c]["name"]
+            rec["teams"] = blocks
+            if dn:
+                lh *= math.exp(-ha * MODEL["derby_home_adv_cut"])
         else:
-            notes.append("Keine ausreichenden Daten für eine Prognose")
+            notes.append("Keine ausreichenden Daten für eine Prognose" +
+                         (" (Team außerhalb der abgedeckten Ligen)" if comp in CUPS else ""))
 
         if lh is not None:
             m = score_matrix(lh, la, rho, derby=bool(dn))

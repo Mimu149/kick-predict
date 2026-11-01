@@ -53,7 +53,8 @@ class ApiFootball:
 
     def fixtures(self, days):
         out = []
-        for i in range(days):
+        # Gratis-Plan: nur gestern bis morgen abrufbar
+        for i in range(min(days, 2)):
             d = (date.today() + timedelta(days=i)).isoformat()
             resp = self.get("/fixtures", date=d, timezone="UTC")
             if resp is None:
@@ -185,14 +186,19 @@ def fd_standings(code):
 
 def clubelo(d=None):
     d = d or date.today()
-    try:
-        text = csv_text(http_get(f"http://api.clubelo.com/{d.isoformat()}"))
-        df = pd.read_csv(to_io(text))
-        df = df.dropna(subset=["Club", "Elo"])
-        return {r["Club"]: {"elo": float(r["Elo"]), "country": r["Country"]} for _, r in df.iterrows()}
-    except Exception as e:  # noqa: BLE001
-        log(f"ClubElo: {e}")
-        return {}
+    last = None
+    for day in (d, d - timedelta(days=1), d - timedelta(days=3)):
+        for scheme in ("http", "https"):
+            try:
+                text = csv_text(http_get(f"{scheme}://api.clubelo.com/{day.isoformat()}", retries=2))
+                df = pd.read_csv(to_io(text))
+                df = df.dropna(subset=["Club", "Elo"])
+                if len(df):
+                    return {r["Club"]: {"elo": float(r["Elo"]), "country": r["Country"]} for _, r in df.iterrows()}
+            except Exception as e:  # noqa: BLE001
+                last = e
+    log(f"ClubElo nicht erreichbar: {last}")
+    return {}
 
 
 def comp_name(comp):

@@ -23,6 +23,10 @@ LEAGUES = {
     "DK":  {"name": "Superliga",       "country": "Dänemark",    "flag": "🇩🇰", "new": "DNK", "fd": None,  "api": 119, "elo": "DEN"},
 }
 
+# Ligastärke (Log-Skala, relativ zur Premier League) – Ersatz, falls ClubElo nicht erreichbar ist
+LEAGUE_STRENGTH = {"PL": 0.0, "LL": -0.06, "BL": -0.08, "SA": -0.07, "L1": -0.14,
+                   "PT": -0.22, "TR": -0.30, "DK": -0.36}
+
 # Europapokale (keine eigene Liga-Historie -> Modell über ClubElo + Liga-Modelle)
 CUPS = {
     "CL":  {"name": "Champions League",  "flag": "⭐", "fd": "CL", "api": 2},

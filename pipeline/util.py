@@ -79,7 +79,7 @@ def season_label(start):
 _STOP = {
     "fc", "cf", "afc", "sc", "ac", "as", "ss", "ssc", "sv", "vfb", "vfl", "tsg", "fsv",
     "bv", "bsc", "rcd", "cd", "ud", "sd", "rc", "ogc", "losc", "us", "sk", "fk", "jk",
-    "if", "bk", "club", "de", "calcio", "the", "1", "1899", "05", "04", "1846", "1907",
+    "if", "bk", "club", "clube", "kv", "sk", "sad", "de", "calcio", "the", "1", "1899", "05", "04", "1846", "1907",
     "1909", "1913", "1919", "1860", "07", "a", "s", "spor", "kulubu", "futbol", "cp",
 }
 
@@ -134,7 +134,7 @@ _ALIAS_RAW = {
     "paris fc": "Paris FC", "le havre ac": "Le Havre",
     # Portugal
     "sporting cp": "Sp Lisbon", "sporting lisbon": "Sp Lisbon", "sporting clube de portugal": "Sp Lisbon",
-    "sporting": "Sp Lisbon", "sc braga": "Sp Braga", "sporting braga": "Sp Braga", "braga": "Sp Braga",
+    "sporting": "Sp Lisbon", "sporting clube de braga": "Sp Braga", "sporting clube braga": "Sp Braga", "sc braga": "Sp Braga", "sporting braga": "Sp Braga", "braga": "Sp Braga",
     "vitoria guimaraes": "Guimaraes", "vitoria sc": "Guimaraes", "fc porto": "Porto",
     "sl benfica": "Benfica", "gil vicente": "Gil Vicente", "fc famalicao": "Famalicao",
     "estoril praia": "Estoril", "moreirense": "Moreirense", "casa pia": "Casa Pia",
@@ -215,6 +215,11 @@ def match_team(name, candidates, threshold=0.72):
             if cand_core and (set(cand_core.split()) <= ctoks or ctoks <= set(cand_core.split()))]
     if len(hits) == 1:
         return hits[0]
+    # Präfix (z. B. "Amed" <-> "Amedspor")
+    if len(c) >= 4:
+        pre = [cand for cand_core, cand in by_core.items() if cand_core.startswith(c) or c.startswith(cand_core)]
+        if len(pre) == 1:
+            return pre[0]
     best, score = None, 0.0
     for cand_core, cand in by_core.items():
         s = difflib.SequenceMatcher(None, c, cand_core).ratio()
