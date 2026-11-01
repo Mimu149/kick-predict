@@ -145,7 +145,7 @@ def fd_matches(days):
         return None
     codes = ",".join(c for c in FD_TO_COMP)
     d0 = date.today()
-    d1 = d0 + timedelta(days=min(days, 10) - 1)
+    d1 = d0 + timedelta(days=10)
     try:
         data = http_get("https://api.football-data.org/v4/matches", headers={"X-Auth-Token": key},
                         params={"competitions": codes, "dateFrom": d0.isoformat(), "dateTo": d1.isoformat()},

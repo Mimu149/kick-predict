@@ -154,6 +154,14 @@ _ALIAS_RAW = {
     "randers": "Randers", "silkeborg": "Silkeborg", "sonderjyske": "Sonderjyske",
     "viborg": "Viborg", "odense": "Odense", "ob": "Odense", "vejle": "Vejle",
     "lyngby": "Lyngby", "midtjylland": "Midtjylland", "fredericia": "Fredericia",
+    # Weitere Ligen
+    "queens park rangers": "QPR", "oh leuven": "Oud-Heverlee Leuven", "union saint gilloise": "St. Gilloise",
+    "royale union saint gilloise": "St. Gilloise", "union sg": "St. Gilloise", "sint truidense": "St Truiden",
+    "sint truiden": "St Truiden", "zulte waregem": "Waregem", "west bromwich albion": "West Brom",
+    "sheffield wednesday": "Sheffield Weds", "psv eindhoven": "PSV Eindhoven", "psv": "PSV Eindhoven",
+    "az alkmaar": "AZ Alkmaar", "olympiacos piraeus": "Olympiakos", "olympiacos": "Olympiakos",
+    "red bull salzburg": "Salzburg", "rb salzburg": "Salzburg", "bsc young boys": "Young Boys",
+    "fc zurich": "Zurich", "fc basel": "Basel", "fc basel 1893": "Basel",
 }
 
 
@@ -215,6 +223,13 @@ def match_team(name, candidates, threshold=0.72):
             if cand_core and (set(cand_core.split()) <= ctoks or ctoks <= set(cand_core.split()))]
     if len(hits) == 1:
         return hits[0]
+    # Abkürzungen (z. B. "Universitatea Cluj" <-> "U. Cluj", "Univ. Craiova")
+    ctl = c.split()
+    ab = [cand for cand_core, cand in by_core.items()
+          if len(cand_core.split()) == len(ctl) and len(ctl) > 1
+          and all(a.startswith(b) or b.startswith(a) for a, b in zip(ctl, cand_core.split()))]
+    if len(ab) == 1:
+        return ab[0]
     # Präfix (z. B. "Amed" <-> "Amedspor")
     if len(c) >= 4:
         pre = [cand for cand_core, cand in by_core.items() if cand_core.startswith(c) or c.startswith(cand_core)]
