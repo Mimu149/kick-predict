@@ -1,5 +1,5 @@
 /* Offline-Unterstützung: App-Dateien aus dem Cache, Daten immer zuerst frisch aus dem Netz. */
-const CACHE = "kick-predict-v1";
+const CACHE = "kick-predict-v2";
 const SHELL = ["./", "index.html", "style.css", "app.js", "manifest.webmanifest", "icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {

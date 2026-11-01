@@ -101,13 +101,15 @@ def main(offline=False):
     ref = pd.Timestamp(NOW.date())
 
     # ---------- Modelle je Liga
-    models, team_comp, tables, league_avgs = {}, {}, {}, {}
+    models, team_comp, tables, league_avgs, cur_of = {}, {}, {}, {}, {}
     for comp in LEAGUES:
         df = hist[hist["comp"] == comp]
         if df.empty:
             continue
-        cur_df = df[df["season"] == cur]
-        prev_teams = set(df[df["season"] == cur - 1]["home"])
+        cs = int(df["season"].max())  # aktuelle Saison dieser Liga (Kalenderjahr-Ligen beachten)
+        cur_of[comp] = cs
+        cur_df = df[df["season"] == cs]
+        prev_teams = set(df[df["season"] == cs - 1]["home"])
         promoted = [t for t in set(cur_df["home"]) | set(cur_df["away"]) if t not in prev_teams]
         try:
             models[comp] = LeagueModel(comp).fit(df, ref, promoted)
@@ -116,13 +118,15 @@ def main(offline=False):
             continue
         for t in set(cur_df["home"]) | set(cur_df["away"]):
             team_comp[t] = comp
-        tables[comp] = {"season": season_label(cur), "rows": st.table(cur_df),
-                        "avg": st.league_averages(df[df["season"] >= cur - 1]), "promoted": promoted}
-        league_avgs[comp] = st.league_averages(df[df["season"] >= cur - 1])
+        label = str(cs) if LEAGUES[comp].get("calendar") else season_label(cs)
+        tables[comp] = {"season": label, "rows": st.table(cur_df),
+                        "avg": st.league_averages(df[df["season"] >= cs - 1]), "promoted": promoted}
+        league_avgs[comp] = st.league_averages(df[df["season"] >= cs - 1])
         log(f"Modell {LEAGUES[comp]['name']}: {models[comp].n_matches} Spiele, Heimvorteil {math.exp(models[comp].home):.2f}x, rho {models[comp].rho:.2f}")
 
     # Kandidaten je Liga: aktuelle + letzte Saison
-    cands = {comp: sorted(set(hist[(hist["comp"] == comp) & (hist["season"] >= cur - 1)]["home"])) for comp in LEAGUES}
+    cands = {comp: sorted(set(hist[(hist["comp"] == comp) & (hist["season"] >= cur_of.get(comp, cur) - 1)]["home"]))
+             for comp in LEAGUES}
     all_current = sorted(team_comp)
 
     elo = {} if offline else clubelo()
@@ -228,7 +232,7 @@ def main(offline=False):
                 ha = mdl.home_adv(hname)
                 lh *= math.exp(-ha * MODEL["derby_home_adv_cut"])
                 notes.append("Derby: Heimvorteil reduziert, Remis wahrscheinlicher")
-            rec["teams"] = _team_block(df, hname, aname, mdl, cur, tables.get(comp))
+            rec["teams"] = _team_block(df, hname, aname, mdl, cur_of[comp], tables.get(comp))
             rec["h2h"] = hh
             rec["model"] = "Poisson/Dixon-Coles" + (" + Elo" if eh and ea else "")
         elif eh and ea:
@@ -246,7 +250,7 @@ def main(offline=False):
                 for side, nm in (("home", hname), ("away", aname)):
                     c = (h if side == "home" else a)["comp"]
                     df = hist[hist["comp"] == c]
-                    blocks[side] = _side_block(df, nm, cur, tables.get(c))
+                    blocks[side] = _side_block(df, nm, cur_of[c], tables.get(c))
                     blocks[side]["league"] = LEAGUES[c]["name"]
                 rec["teams"] = blocks
             if dn:
@@ -266,7 +270,7 @@ def main(offline=False):
             blocks = {}
             for side, nm, c in (("home", hname, h["comp"]), ("away", aname, a["comp"])):
                 df = hist[hist["comp"] == c]
-                blocks[side] = _side_block(df, nm, cur, tables.get(c))
+                blocks[side] = _side_block(df, nm, cur_of[c], tables.get(c))
                 blocks[side]["league"] = LEAGUES[c]["name"]
             rec["teams"] = blocks
             if dn:
@@ -301,7 +305,7 @@ def main(offline=False):
 
     # ---------- Schreiben
     os.makedirs(DATA_DIR, exist_ok=True)
-    meta = {k: {"name": v["name"], "flag": v["flag"], "cup": k in CUPS} for k, v in ALL_COMPS.items()}
+    meta = {k: {"name": v["name"], "flag": v["flag"], "cup": k in CUPS, "country": v.get("country", "Europa")} for k, v in ALL_COMPS.items()}
     write_json(os.path.join(DATA_DIR, "matches.json"),
                {"generated": NOW.isoformat(), "comps": meta, "matches": out})
     write_json(os.path.join(DATA_DIR, "tables.json"),

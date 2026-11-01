@@ -134,3 +134,6 @@ select { background: var(--card); color: var(--text); border: 1px solid var(--li
 .src-ok { color: var(--home); } .src-bad { color: var(--bad); }
 code { background: var(--card2); padding: 1px 5px; border-radius: 5px; font-size: 13px; }
 a { color: var(--away); }
+
+.chips.wrap { flex-wrap: wrap; overflow: visible; }
+.chip small { color: inherit; opacity: .7; }

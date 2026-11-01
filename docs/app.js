@@ -4,7 +4,7 @@
 const S = {
   tab: "games",
   matches: [], comps: {}, tables: null, status: null, generated: null,
-  day: "all", leagues: new Set(),
+  day: "all", hidden: new Set(), showLeagues: false,
   minOdds: 2.0, markets: new Set(["1X2", "O/U", "BTTS", "AH"]),
   tableComp: null, tableMode: "table",
 };
@@ -42,8 +42,7 @@ async function load(force) {
     S.lineupsUpdated = m.lineupsUpdated;
     S.tables = t;
     S.status = s;
-    const saved = store.get("leagues", null);
-    S.leagues = new Set(saved || Object.keys(S.comps));
+    S.hidden = new Set(store.get("hidden", []));
     S.minOdds = store.get("minOdds", 2.0);
     S.markets = new Set(store.get("markets", ["1X2", "O/U", "BTTS", "AH"]));
     const ago = Math.round((Date.now() - dt(S.generated)) / 60000);
@@ -81,9 +80,11 @@ function bind(root) {
   root.querySelectorAll("[data-day]").forEach((el) => el.onclick = () => { S.day = el.dataset.day; render(); });
   root.querySelectorAll("[data-league]").forEach((el) => el.onclick = () => {
     const k = el.dataset.league;
-    if (k === "*") S.leagues = new Set(S.leagues.size === Object.keys(S.comps).length ? [] : Object.keys(S.comps));
-    else S.leagues.has(k) ? S.leagues.delete(k) : S.leagues.add(k);
-    store.set("leagues", [...S.leagues]);
+    if (k === "+") S.hidden = new Set();
+    else if (k === "-") S.hidden = new Set(Object.keys(S.comps));
+    else if (k === "~") { S.showLeagues = !S.showLeagues; render(); return; }
+    else S.hidden.has(k) ? S.hidden.delete(k) : S.hidden.add(k);
+    store.set("hidden", [...S.hidden]);
     render();
   });
   root.querySelectorAll("[data-match]").forEach((el) => el.onclick = () => openMatch(el.dataset.match));
@@ -92,17 +93,31 @@ function bind(root) {
     const k = el.dataset.market; S.markets.has(k) ? S.markets.delete(k) : S.markets.add(k);
     store.set("markets", [...S.markets]); render();
   });
-  root.querySelectorAll("[data-tcomp]").forEach((el) => el.onclick = () => { S.tableComp = el.dataset.tcomp; render(); });
+  root.querySelectorAll("[data-tsel]").forEach((el) => el.onchange = () => { S.tableComp = el.value; render(); });
   root.querySelectorAll("[data-tmode]").forEach((el) => el.onclick = () => { S.tableMode = el.dataset.tmode; render(); });
 }
 
 /* ------------------------------------------------------------ Spiele */
+const vis = (k) => !S.hidden.has(k);
+
+function compOrder() {
+  const keys = Object.keys(S.comps);
+  return [...keys.filter((k) => S.comps[k].cup), ...keys.filter((k) => !S.comps[k].cup)];
+}
+
 function leagueChips() {
-  const keys = Object.keys(S.comps).filter((k) => S.matches.some((m) => m.comp === k));
-  const all = S.leagues.size === Object.keys(S.comps).length;
-  return `<div class="chips"><button class="chip ${all ? "on" : ""}" data-league="*">Alle</button>${keys
-    .map((k) => `<button class="chip ${S.leagues.has(k) ? "on" : ""}" data-league="${k}">${S.comps[k].flag} ${esc(S.comps[k].name)}</button>`)
-    .join("")}</div>`;
+  const counts = {};
+  for (const m of S.matches) counts[m.comp] = (counts[m.comp] || 0) + 1;
+  const keys = compOrder().filter((k) => counts[k]);
+  const on = keys.filter(vis).length;
+  let html = `<div class="chips"><button class="chip ${S.showLeagues ? "on" : ""}" data-league="~">🏆 Ligen ${on}/${keys.length} ${S.showLeagues ? "▴" : "▾"}</button>`;
+  if (!S.showLeagues) {
+    html += keys.filter(vis).slice(0, 12).map((k) => `<button class="chip on" data-league="${k}" title="ausblenden">${S.comps[k].flag} ${esc(S.comps[k].name)} ✕</button>`).join("");
+    return html + `</div>`;
+  }
+  html += `<button class="chip" data-league="+">Alle an</button><button class="chip" data-league="-">Alle aus</button></div>`;
+  html += `<div class="chips wrap">${keys.map((k) => `<button class="chip ${vis(k) ? "on" : ""}" data-league="${k}">${S.comps[k].flag} ${esc(S.comps[k].name)} <small>${counts[k]}</small></button>`).join("")}</div>`;
+  return html;
 }
 
 function dayChips() {
@@ -119,7 +134,7 @@ function dayChips() {
 }
 
 function filtered() {
-  return S.matches.filter((m) => S.leagues.has(m.comp) && (S.day === "all" || dayKey(m.kickoff) === S.day));
+  return S.matches.filter((m) => vis(m.comp) && (S.day === "all" || dayKey(m.kickoff) === S.day));
 }
 
 function matchCard(m) {
@@ -172,7 +187,7 @@ function emptyState() {
 function viewValue() {
   const rows = [];
   for (const m of S.matches) {
-    if (!S.leagues.has(m.comp)) continue;
+    if (!vis(m.comp)) continue;
     for (const v of m.value || []) if (v.isValue && v.odds >= S.minOdds && S.markets.has(v.market)) rows.push({ m, v });
   }
   rows.sort((a, b) => b.v.edge - a.v.edge);
@@ -201,7 +216,7 @@ function viewTables() {
   const keys = Object.keys(T);
   if (!S.tableComp || !T[S.tableComp]) S.tableComp = keys[0];
   const t = T[S.tableComp];
-  let html = `<div class="chips">${keys.map((k) => `<button class="chip ${k === S.tableComp ? "on" : ""}" data-tcomp="${k}">${S.comps[k].flag} ${esc(S.comps[k].name)}</button>`).join("")}</div>`;
+  let html = `<select data-tsel style="margin:4px 0 8px">${keys.map((k) => `<option value="${k}" ${k === S.tableComp ? "selected" : ""}>${S.comps[k].flag} ${esc(S.comps[k].name)} (${esc(S.comps[k].country || "")})</option>`).join("")}</select>`;
   html += `<div class="chips"><button class="chip ${S.tableMode === "table" ? "on" : ""}" data-tmode="table">Tabelle ${esc(t.season)}</button><button class="chip ${S.tableMode === "home" ? "on" : ""}" data-tmode="home">Heim/Auswärts</button><button class="chip ${S.tableMode === "power" ? "on" : ""}" data-tmode="power">Modell-Stärke</button></div>`;
   if (S.tableMode === "power") {
     const R = (S.tables.ratings || {})[S.tableComp] || [];

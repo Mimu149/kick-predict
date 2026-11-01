@@ -13,19 +13,42 @@ DAYS_AHEAD = 7
 #   api   = Liga-ID bei API-Football
 #   elo   = Ländercode bei ClubElo
 LEAGUES = {
-    "PL":  {"name": "Premier League",  "country": "England",     "flag": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "csv": "E0",  "fd": "PL",  "api": 39,  "elo": "ENG"},
-    "BL":  {"name": "Bundesliga",      "country": "Deutschland", "flag": "🇩🇪", "csv": "D1",  "fd": "BL1", "api": 78,  "elo": "GER"},
-    "LL":  {"name": "LaLiga",          "country": "Spanien",     "flag": "🇪🇸", "csv": "SP1", "fd": "PD",  "api": 140, "elo": "ESP"},
-    "SA":  {"name": "Serie A",         "country": "Italien",     "flag": "🇮🇹", "csv": "I1",  "fd": "SA",  "api": 135, "elo": "ITA"},
-    "L1":  {"name": "Ligue 1",         "country": "Frankreich",  "flag": "🇫🇷", "csv": "F1",  "fd": "FL1", "api": 61,  "elo": "FRA"},
-    "PT":  {"name": "Liga Portugal",   "country": "Portugal",    "flag": "🇵🇹", "csv": "P1",  "fd": "PPL", "api": 94,  "elo": "POR"},
-    "TR":  {"name": "Süper Lig",       "country": "Türkei",      "flag": "🇹🇷", "csv": "T1",  "fd": None,  "api": 203, "elo": "TUR"},
-    "DK":  {"name": "Superliga",       "country": "Dänemark",    "flag": "🇩🇰", "new": "DNK", "fd": None,  "api": 119, "elo": "DEN"},
+    # --- Top-Ligen
+    "PL":  {"name": "Premier League",   "country": "England",     "flag": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "csv": "E0",  "fd": "PL",  "api": 39,  "elo": "ENG", "str": 0.0},
+    "BL":  {"name": "Bundesliga",       "country": "Deutschland", "flag": "🇩🇪", "csv": "D1",  "fd": "BL1", "api": 78,  "elo": "GER", "str": -0.08},
+    "LL":  {"name": "LaLiga",           "country": "Spanien",     "flag": "🇪🇸", "csv": "SP1", "fd": "PD",  "api": 140, "elo": "ESP", "str": -0.06},
+    "SA":  {"name": "Serie A",          "country": "Italien",     "flag": "🇮🇹", "csv": "I1",  "fd": "SA",  "api": 135, "elo": "ITA", "str": -0.07},
+    "L1":  {"name": "Ligue 1",          "country": "Frankreich",  "flag": "🇫🇷", "csv": "F1",  "fd": "FL1", "api": 61,  "elo": "FRA", "str": -0.14},
+    "PT":  {"name": "Liga Portugal",    "country": "Portugal",    "flag": "🇵🇹", "csv": "P1",  "fd": "PPL", "api": 94,  "elo": "POR", "str": -0.22},
+    "NL":  {"name": "Eredivisie",       "country": "Niederlande", "flag": "🇳🇱", "csv": "N1",  "fd": "DED", "api": 88,  "elo": "NED", "str": -0.25},
+    "BE":  {"name": "Pro League",       "country": "Belgien",     "flag": "🇧🇪", "csv": "B1",  "api": 144, "elo": "BEL", "str": -0.28},
+    "TR":  {"name": "Süper Lig",        "country": "Türkei",      "flag": "🇹🇷", "csv": "T1",  "api": 203, "elo": "TUR", "str": -0.30},
+    "GR":  {"name": "Super League",     "country": "Griechenland", "flag": "🇬🇷", "csv": "G1", "api": 197, "elo": "GRE", "str": -0.35},
+    "SC":  {"name": "Premiership",      "country": "Schottland",  "flag": "🏴󠁧󠁢󠁳󠁣󠁴󠁿", "csv": "SC0", "api": 179, "elo": "SCO", "str": -0.42},
+    "AT":  {"name": "Bundesliga AT",    "country": "Österreich",  "flag": "🇦🇹", "new": "AUT", "en": "Austria",     "api": 218, "elo": "AUT", "str": -0.35},
+    "CH":  {"name": "Super League CH",  "country": "Schweiz",     "flag": "🇨🇭", "new": "SWZ", "en": "Switzerland", "api": 207, "elo": "SUI", "str": -0.38},
+    "DK":  {"name": "Superliga",        "country": "Dänemark",    "flag": "🇩🇰", "new": "DNK", "en": "Denmark",     "api": 119, "elo": "DEN", "str": -0.36},
+    "PO":  {"name": "Ekstraklasa",      "country": "Polen",       "flag": "🇵🇱", "new": "POL", "en": "Poland",      "api": 106, "elo": "POL", "str": -0.45},
+    "NO":  {"name": "Eliteserien",      "country": "Norwegen",    "flag": "🇳🇴", "new": "NOR", "en": "Norway",      "api": 103, "elo": "NOR", "str": -0.45, "calendar": True},
+    "SE":  {"name": "Allsvenskan",      "country": "Schweden",    "flag": "🇸🇪", "new": "SWE", "en": "Sweden",      "api": 113, "elo": "SWE", "str": -0.50, "calendar": True},
+    "RO":  {"name": "Liga I",           "country": "Rumänien",    "flag": "🇷🇴", "new": "ROU", "en": "Romania",     "api": 283, "elo": "ROM", "str": -0.55},
+    "RU":  {"name": "Premier Liga",     "country": "Russland",    "flag": "🇷🇺", "new": "RUS", "en": "Russia",      "api": 235, "elo": "RUS", "str": -0.40},
+    "FI":  {"name": "Veikkausliiga",    "country": "Finnland",    "flag": "🇫🇮", "new": "FIN", "en": "Finland",     "api": 244, "elo": "FIN", "str": -0.70, "calendar": True},
+    "IE":  {"name": "Premier Division", "country": "Irland",      "flag": "🇮🇪", "new": "IRL", "en": "Ireland",     "api": 357, "elo": "IRL", "str": -0.75, "calendar": True},
+    # --- 2. Ligen
+    "EN2": {"name": "Championship",     "country": "England",     "flag": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "csv": "E1",  "fd": "ELC", "api": 40,  "elo": "ENG", "str": -0.45},
+    "EN3": {"name": "League One",       "country": "England",     "flag": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "csv": "E2",  "api": 41,  "elo": "ENG", "str": -0.70},
+    "EN4": {"name": "League Two",       "country": "England",     "flag": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "csv": "E3",  "api": 42,  "elo": "ENG", "str": -0.85},
+    "DE2": {"name": "2. Bundesliga",    "country": "Deutschland", "flag": "🇩🇪", "csv": "D2",  "api": 79,  "elo": "GER", "str": -0.45},
+    "ES2": {"name": "LaLiga 2",         "country": "Spanien",     "flag": "🇪🇸", "csv": "SP2", "api": 141, "elo": "ESP", "str": -0.50},
+    "IT2": {"name": "Serie B",          "country": "Italien",     "flag": "🇮🇹", "csv": "I2",  "api": 136, "elo": "ITA", "str": -0.50},
+    "FR2": {"name": "Ligue 2",          "country": "Frankreich",  "flag": "🇫🇷", "csv": "F2",  "api": 62,  "elo": "FRA", "str": -0.55},
+    "SC2": {"name": "Championship SCO", "country": "Schottland",  "flag": "🏴󠁧󠁢󠁳󠁣󠁴󠁿", "csv": "SC1", "api": 180, "elo": "SCO", "str": -0.80},
 }
 
-# Ligastärke (Log-Skala, relativ zur Premier League) – Ersatz, falls ClubElo nicht erreichbar ist
-LEAGUE_STRENGTH = {"PL": 0.0, "LL": -0.06, "BL": -0.08, "SA": -0.07, "L1": -0.14,
-                   "PT": -0.22, "TR": -0.30, "DK": -0.36}
+# Ligastärke (Log-Skala, relativ zur Premier League) – grobe Schätzung, nur für Europapokal-Spiele
+# ohne ClubElo. Anpassbar über "str" oben.
+LEAGUE_STRENGTH = {k: v["str"] for k, v in LEAGUES.items()}
 
 # Europapokale (keine eigene Liga-Historie -> Modell über ClubElo + Liga-Modelle)
 CUPS = {
@@ -38,6 +61,7 @@ ALL_COMPS = {**LEAGUES, **CUPS}
 API_TO_COMP = {v["api"]: k for k, v in ALL_COMPS.items()}
 FD_TO_COMP = {v["fd"]: k for k, v in ALL_COMPS.items() if v.get("fd")}
 CSV_TO_COMP = {v["csv"]: k for k, v in LEAGUES.items() if v.get("csv")}
+EN_TO_COMP = {v["en"]: k for k, v in LEAGUES.items() if v.get("en")}
 
 # Derbys: Paare von Schlüsselwort-Listen (auf normalisierte Teamnamen geprüft)
 DERBIES = [
@@ -89,6 +113,39 @@ DERBIES = [
     (["copenhagen", "kobenhavn"], ["brondby"], "New Firm"),
     (["aarhus", "agf"], ["aalborg", "aab"], "Jysk Derby"),
     (["midtjylland"], ["viborg", "silkeborg"], "Midtjysk Derby"),
+    # Weitere Ligen
+    (["celtic"], ["rangers"], "Old Firm"),
+    (["hearts"], ["hibernian"], "Edinburgh Derby"),
+    (["dundee"], ["dundee united"], "Dundee Derby"),
+    (["ajax"], ["feyenoord"], "De Klassieker"),
+    (["ajax"], ["psv"], "Topper"),
+    (["psv"], ["feyenoord"], "Topper"),
+    (["anderlecht"], ["standard"], "Clasico (BE)"),
+    (["club brugge", "brugge"], ["cercle"], "Brugse Derby"),
+    (["club brugge", "brugge"], ["anderlecht"], "Topper (BE)"),
+    (["olympiakos", "olympiacos"], ["panathinaikos"], "Derby der ewigen Feinde"),
+    (["aek"], ["panathinaikos", "olympiakos", "olympiacos"], "Athen-Derby"),
+    (["paok"], ["aris"], "Thessaloniki-Derby"),
+    (["rapid"], ["austria vienna", "austria wien"], "Wiener Derby"),
+    (["salzburg"], ["rapid", "sturm"], "Österreich-Topspiel"),
+    (["basel"], ["zurich"], "Klassiker (CH)"),
+    (["young boys"], ["basel"], "Klassiker (CH)"),
+    (["legia"], ["lech"], "Polen-Klassiker"),
+    (["wisla"], ["cracovia"], "Krakauer Derby"),
+    (["rosenborg"], ["molde"], "Norwegen-Topspiel"),
+    (["aik"], ["djurgarden", "hammarby"], "Stockholm-Derby"),
+    (["djurgarden"], ["hammarby"], "Stockholm-Derby"),
+    (["malmo"], ["helsingborg", "goteborg"], "Schweden-Derby"),
+    (["fcsb", "steaua"], ["dinamo", "rapid"], "Bukarest-Derby"),
+    (["spartak"], ["cska"], "Moskau-Derby"),
+    (["hjk"], ["hifk"], "Helsinki-Derby"),
+    (["shamrock"], ["bohemians"], "Dublin-Derby"),
+    (["schalke"], ["dortmund", "bochum"], "Revierderby"),
+    (["hertha"], ["union berlin"], "Berlin-Derby"),
+    (["sheffield united"], ["sheffield weds"], "Steel City Derby"),
+    (["sunderland"], ["middlesbrough"], "Tees-Wear Derby"),
+    (["sampdoria"], ["genoa"], "Derby della Lanterna"),
+    (["sporting gijon"], ["oviedo"], "Asturien-Derby"),
 ]
 
 # Modell-Parameter

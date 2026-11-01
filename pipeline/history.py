@@ -116,14 +116,12 @@ def _num(r, *cols):
 
 
 def _odds_row(r):
-    from config import CSV_TO_COMP, LEAGUES
+    from config import CSV_TO_COMP, EN_TO_COMP
     comp = None
     if "Div" in r and r["Div"] in CSV_TO_COMP:
         comp = CSV_TO_COMP[r["Div"]]
     elif "Country" in r:
-        for k, cfg in LEAGUES.items():
-            if cfg.get("new") and str(r.get("Country", "")).lower().startswith("den"):
-                comp = k
+        comp = EN_TO_COMP.get(str(r.get("Country", "")).strip())
     if not comp:
         return None
     home = r.get("HomeTeam", r.get("Home"))
