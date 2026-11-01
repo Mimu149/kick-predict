@@ -158,7 +158,7 @@ _ALIAS_RAW = {
     "queens park rangers": "QPR", "oh leuven": "Oud-Heverlee Leuven", "union saint gilloise": "St. Gilloise",
     "royale union saint gilloise": "St. Gilloise", "union sg": "St. Gilloise", "sint truidense": "St Truiden",
     "sint truiden": "St Truiden", "zulte waregem": "Waregem", "west bromwich albion": "West Brom",
-    "sheffield wednesday": "Sheffield Weds", "psv eindhoven": "PSV Eindhoven", "psv": "PSV Eindhoven",
+    "sheffield wednesday": "Sheffield Weds", "psv eindhoven": "PSV Eindhoven", "nec": "Nijmegen", "nec nijmegen": "Nijmegen", "psv": "PSV Eindhoven",
     "az alkmaar": "AZ Alkmaar", "olympiacos piraeus": "Olympiakos", "olympiacos": "Olympiakos",
     "red bull salzburg": "Salzburg", "rb salzburg": "Salzburg", "bsc young boys": "Young Boys",
     "fc zurich": "Zurich", "fc basel": "Basel", "fc basel 1893": "Basel",
@@ -179,7 +179,7 @@ def norm(name):
 
 
 def core(name):
-    toks = [t for t in norm(name).split() if t not in _STOP]
+    toks = [t for t in norm(name).split() if t not in _STOP and not re.fullmatch(r"(18|19|20)\d\d", t)]
     return " ".join(toks) or norm(name)
 
 
