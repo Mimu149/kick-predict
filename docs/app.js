@@ -116,6 +116,13 @@ function bind(root) {
   });
   root.querySelectorAll("[data-match]").forEach((el) => el.onclick = () => openMatch(el.dataset.match));
   bindAdds(root);
+  root.querySelectorAll("[data-fav]").forEach((el) => el.onclick = (e) => {
+    e.stopPropagation();
+    const id = el.dataset.fav;
+    if (FAVS.has(id)) { FAVS.delete(id); toast(t("favRm")); } else { FAVS.add(id); toast(t("favAdd")); }
+    store.set("favs", [...FAVS]); render();
+  });
+  root.querySelectorAll("[data-onlyfav]").forEach((el) => el.onclick = () => { S.onlyFavs = !S.onlyFavs; render(); });
   root.querySelectorAll("[data-minodds]").forEach((el) => el.onclick = () => { S.minOdds = +el.dataset.minodds; store.set("minOdds", S.minOdds); render(); });
   root.querySelectorAll("[data-market]").forEach((el) => el.onclick = () => {
     const k = el.dataset.market; S.markets.has(k) ? S.markets.delete(k) : S.markets.add(k);
@@ -172,7 +179,7 @@ function dayChips() {
 }
 
 function filtered() {
-  return S.matches.filter((m) => vis(m.comp) && (S.day === "all" || dayKey(m.kickoff) === S.day));
+  return S.matches.filter((m) => (S.onlyFavs ? FAVS.has(m.id) : vis(m.comp)) && (S.day === "all" || dayKey(m.kickoff) === S.day));
 }
 
 function matchCard(m) {
@@ -191,19 +198,29 @@ function matchCard(m) {
     ? `<div class="tipline"><span>${t("tip")}: <b class="conf-${m.tip.conf}">${esc(trPick(m.tip.pick))}</b></span><span>${esc(trGoals(m.tip.goals))} · ${pct(m.tip.goalsP)}</span></div>`
     : "";
   return `<div class="card match" data-match="${esc(m.id)}">
-    <div class="m-top"><span>${c.flag} ${esc(c.name)} · ${fmtTime(m.kickoff)}</span><span class="badges">${badges}</span></div>
+    <div class="m-top"><span><button class="star ${FAVS.has(m.id) ? "on" : ""}" data-fav="${esc(m.id)}">${FAVS.has(m.id) ? "★" : "☆"}</button>${c.flag} ${esc(c.name)} · ${fmtTime(m.kickoff)}</span><span class="badges">${badges}</span></div>
     <div class="teams">
       <div class="team">${logo(m.homeLogo)}<span>${esc(m.home)}</span></div>
       <div class="xg">${m.xg ? `<b>${num(m.xg[0], 1)} : ${num(m.xg[1], 1)}</b><br>xG` : "vs"}</div>
       <div class="team r"><span>${esc(m.away)}</span>${logo(m.awayLogo)}</div>
-    </div>${bar}${tip}</div>`;
+    </div>${bar}${tip}${quickRow(m)}</div>`;
+}
+
+function quickRow(m) {
+  const o = m.odds || {}, p = (m.p && m.p["1X2"]) || {};
+  const q = (k, lbl) => {
+    const od = o[k] || (p[k] ? 1 / p[k] : null);
+    return `<button class="qb" data-add="${esc(m.id)}|${k}"><b>${lbl}</b>${od ? `<span>${odd(od)}</span>` : ""}<i>＋</i></button>`;
+  };
+  return `<div class="qrow">${q("H", "1")}${q("D", "X")}${q("A", "2")}</div>`;
 }
 
 function viewGames() {
   if (!S.matches.length) return emptyState();
   const list = filtered();
   let html = dayChips() + leagueChips();
-  if (!list.length) return html + `<div class="empty"><b>🔍</b>${t("noGamesFilter")}</div>`;
+  html += `<div class="chips"><button class="chip ${S.onlyFavs ? "on" : ""}" data-onlyfav="1">⭐ ${t("favorites")} (${S.matches.filter((m) => FAVS.has(m.id)).length})</button></div>`;
+  if (!list.length) return html + `<div class="empty"><b>${S.onlyFavs ? "⭐" : "🔍"}</b>${S.onlyFavs ? t("noFavs") : t("noGamesFilter")}</div>`;
   let lastDay = null;
   for (const m of list) {
     const k = dayKey(m.kickoff);
@@ -453,6 +470,16 @@ function renderDetail(m) {
   box.innerHTML = html;
   box.querySelectorAll("[data-dtab]").forEach((b) => b.onclick = () => { detailTab = b.dataset.dtab; renderDetail(m); });
   bindAdds(box);
+  const ca = box.querySelector("[data-cadd]");
+  if (ca) ca.onclick = () => {
+    const txt = box.querySelector("[data-ctext]").value.trim();
+    const od = pnum(box.querySelector("[data-codd]").value);
+    if (!txt) { box.querySelector("[data-ctext]").focus(); return; }
+    SLIP.legs.push({ id: m.id, key: "CUSTOM", label: txt, comp: m.comp, kickoff: m.kickoff, home: m.home, away: m.away,
+      p: null, fair: null, odds: od && od >= 1 ? od : 1.5 });
+    saveSlip(); updateFab(); toast(t("added"));
+    box.querySelector("[data-ctext]").value = ""; box.querySelector("[data-codd]").value = "";
+  };
 }
 
 function detailBody(m) {
@@ -471,10 +498,23 @@ function edgeCell(p, o) {
   return `<td class="${e > 0 ? "edge-pos" : "edge-neg"}">${e > 0 ? "+" : ""}${num(e * 100, 1)}%</td>`;
 }
 
+function quickAdd(m) {
+  const keys = [["H", "1"], ["D", "X"], ["A", "2"], ["1X", "1X"], ["X2", "X2"], ["O25", t("over") + " 2,5"], ["U25", t("under") + " 2,5"], ["BTTSY", "BTTS ✓"], ["BTTSN", "BTTS ✗"]];
+  const avail = m.p ? keys : keys.slice(0, 3);
+  return `<h3>🧾 ${t("quickAdd")}</h3><div class="qgrid">${avail.map(([k, l]) => {
+    const info = selInfo(m, k); const od = info.odds || info.fair;
+    return `<button class="qb" data-add="${esc(m.id)}|${k}"><b>${esc(l)}</b>${od ? `<span>${odd(od)}</span>` : ""}<i>＋</i></button>`;
+  }).join("")}</div>
+  <div class="card" style="margin-top:8px"><small>${t("customTip")}</small>
+    <div style="display:flex;gap:6px;margin-top:6px"><input class="txtin" data-ctext placeholder="${esc(t("customPh"))}"><input class="oddin" data-codd inputmode="decimal" placeholder="1,85"></div>
+    <button class="btn small" style="margin-top:8px" data-cadd="${esc(m.id)}">${t("addCustom")}</button><br><small>${t("customNote")}</small></div>`;
+}
+
 function dPred(m) {
-  if (!m.p) return `<div class="empty"><b>🤷</b>${t("tooLittle")}</div>`;
+  if (!m.p) return quickAdd(m) + `<div class="empty"><b>🤷</b>${t("tooLittle")}</div>`;
   const p = m.p, o = m.odds || {};
   let h = (m.notes || []).map((n) => `<div class="note">${esc(trNote(n))}</div>`).join("");
+  h += quickAdd(m);
   h += `<div class="info-note">🧾 ${t("tapHint")}</div>`;
   h += `<div class="bar"><div class="h" style="flex:${p["1X2"].H}">1 · ${pct(p["1X2"].H)}</div><div class="d" style="flex:${p["1X2"].D}">X · ${pct(p["1X2"].D)}</div><div class="a" style="flex:${p["1X2"].A}">2 · ${pct(p["1X2"].A)}</div></div>`;
   h += `<div class="grid3" style="margin-top:8px"><div class="stat"><small>xG ${esc(m.home)}</small><b>${num(m.xg[0], 2)}</b></div><div class="stat"><small>${t("tip")}</small><b class="conf-${m.tip.conf}" style="font-size:15px">${esc(trPick(m.tip.pick))}</b><i>${t("confidence", { x: trConf(m.tip.conf) })}</i></div><div class="stat"><small>xG ${esc(m.away)}</small><b>${num(m.xg[1], 2)}</b></div></div>`;
@@ -616,6 +656,7 @@ function dLineup(m) {
 }
 
 /* ------------------------------------------------------------ Kupon / Meine Wetten */
+const FAVS = new Set(store.get("favs", []));
 const SLIP = { legs: store.get("slip", []), type: store.get("slipType", "combo"), stake: store.get("slipStake", 10), bets: store.get("bets", []), view: "slip" };
 const saveSlip = () => { store.set("slip", SLIP.legs); store.set("slipType", SLIP.type); store.set("slipStake", SLIP.stake); };
 const saveBets = () => store.set("bets", SLIP.bets);
@@ -655,6 +696,7 @@ function selInfo(m, key) {
 
 function selLabel(leg) {
   const k = leg.key, h = leg.home, a = leg.away;
+  if (k === "CUSTOM") return "✍️ " + leg.label;
   const ln = (d) => num(parseInt(d, 10) / 10, 1);
   if (["H", "D", "A", "1X", "X2", "12", "BTTSY", "BTTSN"].includes(k)) return t("s_" + k, { h, a });
   if (/^[OU]\d+$/.test(k)) return t("s_" + k[0], { l: ln(k.slice(1)) });

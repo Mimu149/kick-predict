@@ -170,3 +170,15 @@ td[data-add]::after, .stat[data-add] b::after { content: " ＋"; color: var(--ac
 .st { font-weight: 800; }
 .st.won { color: var(--home); } .st.lost { color: var(--bad); } .st.open { color: var(--draw); }
 .betcard.won { border-left: 4px solid var(--home); } .betcard.lost { border-left: 4px solid var(--bad); }
+
+.star { font-size: 18px; color: var(--muted); margin-right: 6px; padding: 0 2px; line-height: 1; }
+.star.on { color: #f2c14e; }
+.qrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+.qgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.qb { position: relative; display: flex; justify-content: center; align-items: baseline; gap: 6px; padding: 8px 4px; border-radius: 10px;
+  background: var(--card2); border: 1px solid var(--line); font-size: 13px; }
+.qb b { color: var(--text); }
+.qb span { color: var(--accent); font-weight: 700; }
+.qb i { font-style: normal; color: var(--muted); font-size: 11px; }
+.qb:active { background: #10331f; }
+.txtin { flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 7px 8px; font: inherit; }

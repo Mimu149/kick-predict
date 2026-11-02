@@ -9,6 +9,9 @@ const LANGS = {
 
 const I18N = {
   de: {
+    favorites: "Favoriten", favAdd: "Als Favorit markiert ⭐", favRm: "Favorit entfernt", noFavs: "Noch keine Favoriten. Tippe auf ☆ bei einem Spiel.",
+    quickAdd: "Zum Kupon hinzufügen", customTip: "Eigener Tipp", customPh: "z. B. Kane trifft, Ecken Bayern > 6 …", addCustom: "＋ Eigenen Tipp hinzufügen",
+    customNote: "Eigene Tipps wertest du selbst unter „Meine Wetten“ aus (✓ / ✗).", g_ou: "Ü/U 2,5",
     coupon: "Kupon", newSlip: "Neuer Schein", myBets: "Meine Wetten", added: "Zum Kupon hinzugefügt ✓", already: "Ist schon im Kupon",
     tapHint: "Tippe auf eine Wahrscheinlichkeit (＋), um den Tipp in deinen Kupon zu legen.",
     single: "Einzelwetten", combo: "Kombi", stake: "Einsatz", stakeEach: "Einsatz je Wette", yourOdds: "Deine Quote", totalOdds: "Gesamtquote",
@@ -95,6 +98,9 @@ const I18N = {
     n_cup: "Europapokal: Schätzung über Liga-Modelle (ClubElo nicht verfügbar)",
   },
   en: {
+    favorites: "Favourites", favAdd: "Marked as favourite ⭐", favRm: "Favourite removed", noFavs: "No favourites yet. Tap ☆ on a match.",
+    quickAdd: "Add to bet slip", customTip: "Custom tip", customPh: "e.g. Kane scores, Bayern corners > 6 …", addCustom: "＋ Add custom tip",
+    customNote: "You settle custom tips yourself under “My bets” (✓ / ✗).", g_ou: "O/U 2.5",
     coupon: "Bet slip", newSlip: "New slip", myBets: "My bets", added: "Added to bet slip ✓", already: "Already on the bet slip",
     tapHint: "Tap a probability (＋) to put the tip on your bet slip.",
     single: "Singles", combo: "Accumulator", stake: "Stake", stakeEach: "Stake per bet", yourOdds: "Your odds", totalOdds: "Total odds",
@@ -175,6 +181,9 @@ const I18N = {
     n_cup: "European cup: estimate via league models (ClubElo unavailable)",
   },
   tr: {
+    favorites: "Favoriler", favAdd: "Favorilere eklendi ⭐", favRm: "Favorilerden çıkarıldı", noFavs: "Henüz favori yok. Bir maçta ☆'a dokun.",
+    quickAdd: "Kupona ekle", customTip: "Kendi tahminin", customPh: "ör. Kane gol atar, Bayern korner > 6 …", addCustom: "＋ Kendi tahminini ekle",
+    customNote: "Kendi tahminlerini „Bahislerim“ altında kendin değerlendirirsin (✓ / ✗).", g_ou: "2,5 A/Ü",
     coupon: "Kupon", newSlip: "Yeni kupon", myBets: "Bahislerim", added: "Kupona eklendi ✓", already: "Zaten kuponda",
     tapHint: "Tahmini kupona eklemek için bir olasılığa (＋) dokun.",
     single: "Tekli", combo: "Kombine", stake: "Bahis", stakeEach: "Bahis başına", yourOdds: "Senin oranın", totalOdds: "Toplam oran",
