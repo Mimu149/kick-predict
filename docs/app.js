@@ -49,7 +49,7 @@ async function load(force) {
     S.hidden = new Set(store.get("hidden", []));
     S.minOdds = store.get("minOdds", 2.0);
     S.markets = new Set(store.get("markets", ["1X2", "O/U", "BTTS", "AH"]));
-    S.pickGroups = new Set(store.get("pickGroups", ["1X2", "Goals", "BTTS"]));
+    S.pickGroups = new Set(store.get("pickGroups", ["1X2", "Goals", "BTTS", "Half"]));
     S.pickMin = store.get("pickMin", 0.6);
     S.pickOne = store.get("pickOne", true);
     updatedLabel();
@@ -96,7 +96,7 @@ window.addEventListener("popstate", () => { if (!$("#sheet").hidden) closeSheet(
 function render() {
   const v = $("#view");
   if (S.tab === "games") v.innerHTML = viewGames();
-  else if (S.tab === "picks") v.innerHTML = S.pickMode === "value" ? pickModeChips() + viewValue() : viewPicks();
+  else if (S.tab === "picks") v.innerHTML = S.pickMode === "value" ? pickModeChips() + viewValue() : S.pickMode === "kombi" ? viewKombi() : viewPicks();
   else if (S.tab === "results") v.innerHTML = viewResults();
   else if (S.tab === "tables") v.innerHTML = viewTables();
   else v.innerHTML = viewInfo();
@@ -127,6 +127,14 @@ function bind(root) {
   root.querySelectorAll("[data-market]").forEach((el) => el.onclick = () => {
     const k = el.dataset.market; S.markets.has(k) ? S.markets.delete(k) : S.markets.add(k);
     store.set("markets", [...S.markets]); render();
+  });
+  root.querySelectorAll("[data-kt]").forEach((el) => el.onclick = () => { S.kT = +el.dataset.kt; render(); });
+  root.querySelectorAll("[data-kl]").forEach((el) => el.onclick = () => { S.kL = +el.dataset.kl; render(); });
+  root.querySelectorAll("[data-kadd]").forEach((el) => el.onclick = () => {
+    const k = S._kombis && S._kombis[+el.dataset.kadd]; if (!k) return;
+    for (const l of k.legs) if (!SLIP.legs.some((x) => x.id === l.m.id && x.key === l.p.k))
+      SLIP.legs.push({ id: l.m.id, key: l.p.k, comp: l.m.comp, kickoff: l.m.kickoff, home: l.m.home, away: l.m.away, p: l.p.p, fair: l.p.fair, odds: +l.o.toFixed(2) });
+    SLIP.type = "combo"; saveSlip(); updateFab(); toast(t("added"));
   });
   root.querySelectorAll("[data-pmode]").forEach((el) => el.onclick = () => { S.pickMode = el.dataset.pmode; render(); });
   root.querySelectorAll("[data-pday]").forEach((el) => el.onclick = () => { S.pickDay = el.dataset.pday; render(); });
@@ -216,7 +224,7 @@ function probTiles(m) {
     const od = o[k] || (p[k] ? 1 / p[k] : null);
     const v = p[k] != null ? `${Math.round(p[k] * 100)}<small>%</small>` : "–";
     return `<button class="pt ${cls} ${best === k ? "fav" : ""}" style="--w:${p[k] ? Math.round(p[k] * 100) : 0}%" data-add="${esc(m.id)}|${k}" aria-label="${esc(lbl)}">
-      <span class="k">${lbl}</span><span class="v">${v}</span><span class="o">${od ? odd(od) : ""}<em>+</em></span></button>`;
+      <span class="k">${lbl}</span><span class="v">${v}</span><span class="o">${od ? odd(od) : ""}${mv(m, k)}<em>+</em></span></button>`;
   };
   return `<div class="probs">${tile("H", "1", "h")}${tile("D", "X", "d")}${tile("A", "2", "a")}</div>`;
 }
@@ -271,7 +279,7 @@ function viewResults() {
       <div class="stat"><small>${t("btts")}</small><b>${rate(sm.btts)}</b><i>${sm.btts.ok}/${sm.btts.n}</i></div></div>`;
     if (v && v.n) html += `<div class="card row-between" style="margin-top:6px"><span>💎 ${t("valueTips")}${v === sm.value2 ? " " + t("odds2") : ""}<br><small>${t("wonOf", { a: v.won, b: v.n })}</small></span><b class="${v.profit >= 0 ? "src-ok" : "src-bad"}" style="font-size:20px">${v.profit >= 0 ? "+" : ""}${num(v.profit, 2)}<br><small>ROI ${num(v.roi * 100, 1)}%</small></b></div>`;
     const pk = sm.picks || {};
-    if (pk.all && pk.all.n) html += `<div class="card"><div class="row-between"><span>🎯 ${t("picksStat")}</span><b class="${pk.all.ok / pk.all.n >= 0.6 ? "src-ok" : "src-bad"}" style="font-size:20px">${rate(pk.all)}</b></div><small>${["1X2", "DC", "Goals", "BTTS", "Corners"].filter((g) => pk[g]).map((g) => `${t("g_" + g)} ${rate(pk[g])} (${pk[g].ok}/${pk[g].n})`).join(" · ")}${pk.p70 ? ` · ≥70 %: ${rate(pk.p70)}` : ""}</small></div>`;
+    if (pk.all && pk.all.n) html += `<div class="card"><div class="row-between"><span>🎯 ${t("picksStat")}</span><b class="${pk.all.ok / pk.all.n >= 0.6 ? "src-ok" : "src-bad"}" style="font-size:20px">${rate(pk.all)}</b></div><small>${["1X2", "DC", "Goals", "BTTS", "Half", "Corners", "Cards"].filter((g) => pk[g]).map((g) => `${t("g_" + g)} ${rate(pk[g])} (${pk[g].ok}/${pk[g].n})`).join(" · ")}${pk.p70 ? ` · ≥70 %: ${rate(pk.p70)}` : ""}</small></div>`;
     const bc = sm.byConf || {};
     const conf = ["hoch", "mittel", "niedrig"].filter((c) => bc[c]);
     if (conf.length) html += `<small>${t("byConf")}: ${conf.map((c) => `${trConf(c)} ${rate(bc[c])} (${bc[c].n})`).join(" · ")}</small>`;
@@ -312,7 +320,7 @@ function resultCard(m) {
 
 /* ------------------------------------------------------------ Daily Picks */
 function pickModeChips() {
-  return `<div class="chips"><button class="chip ${S.pickMode === "daily" ? "on" : ""}" data-pmode="daily">🎯 ${t("dailyPicks")}</button><button class="chip ${S.pickMode === "value" ? "on" : ""}" data-pmode="value">💎 ${t("value")}</button></div>`;
+  return `<div class="chips"><button class="chip ${S.pickMode === "daily" ? "on" : ""}" data-pmode="daily">🎯 ${t("dailyPicks")}</button><button class="chip ${S.pickMode === "kombi" ? "on" : ""}" data-pmode="kombi">🧩 ${t("kombiGen")}</button><button class="chip ${S.pickMode === "value" ? "on" : ""}" data-pmode="value">💎 ${t("value")}</button></div>`;
 }
 
 function viewPicks() {
@@ -325,7 +333,7 @@ function viewPicks() {
     : dt(S.matches.find((x) => dayKey(x.kickoff) === k).kickoff).toLocaleDateString(loc(), { weekday: "short", day: "2-digit", month: "2-digit" });
   html += `<div class="chips">${days.map((k) => `<button class="chip ${S.pickDay === k ? "on" : ""}" data-pday="${k}">${dl(k)}</button>`).join("")}<button class="chip ${S.pickDay === "all" ? "on" : ""}" data-pday="all">${t("allDays")}</button></div>`;
   html += `<div class="chips">${[0.6, 0.65, 0.7, 0.75, 0.8].map((x) => `<button class="chip ${S.pickMin === x ? "on" : ""}" data-pmin="${x}">${t("minProb", { x: Math.round(x * 100) })}</button>`).join("")}</div>`;
-  html += `<div class="chips">${["1X2", "DC", "Goals", "BTTS", "Corners"].map((g) => `<button class="chip ${S.pickGroups.has(g) ? "on" : ""}" data-pgroup="${g}">${t("g_" + g)}</button>`).join("")}<button class="chip ${S.pickOne ? "on" : ""}" data-pone="1">${S.pickOne ? t("onePer") : t("allPicks")}</button></div>`;
+  html += `<div class="chips">${["1X2", "DC", "Goals", "BTTS", "Half", "Corners", "Cards"].map((g) => `<button class="chip ${S.pickGroups.has(g) ? "on" : ""}" data-pgroup="${g}">${t("g_" + g)}</button>`).join("")}<button class="chip ${S.pickOne ? "on" : ""}" data-pone="1">${S.pickOne ? t("onePer") : t("allPicks")}</button></div>`;
   const rows = [];
   for (const m of S.matches) {
     if (!vis(m.comp) || !m.picks) continue;
@@ -339,6 +347,7 @@ function viewPicks() {
   const ph = sm && sm.picks && sm.picks.all;
   html += `<div class="info-note">${t("picksExplain", { x: Math.round(S.pickMin * 100) })}${ph && ph.n ? "<br><b>" + t("picksHit", { r: rate(ph), a: ph.ok, b: ph.n }) + "</b>" : ""}</div>`;
   if (S.pickGroups.has("Corners")) html += `<div class="note">${t("cornersWeak")}</div>`;
+  if (S.pickGroups.has("Cards")) html += `<div class="note">${t("cardsNote")}</div>`;
   if (!rows.length) return html + `<div class="empty"><b>🎯</b>${t("noPicks")}</div>`;
   for (const { m, p } of rows) {
     const c = S.comps[m.comp] || { flag: "" };
@@ -398,7 +407,16 @@ function viewTables() {
   if (!S.tableComp || !T[S.tableComp]) S.tableComp = keys[0];
   const t = T[S.tableComp];
   let html = `<select data-tsel style="margin:4px 0 8px">${keys.map((k) => `<option value="${k}" ${k === S.tableComp ? "selected" : ""}>${S.comps[k].flag} ${esc(S.comps[k].name)} (${esc(country(S.comps[k].country || ""))})</option>`).join("")}</select>`;
-  html += `<div class="chips"><button class="chip ${S.tableMode === "table" ? "on" : ""}" data-tmode="table">${tr("table")} ${esc(t.season)}</button><button class="chip ${S.tableMode === "home" ? "on" : ""}" data-tmode="home">${tr("homeAway")}</button><button class="chip ${S.tableMode === "power" ? "on" : ""}" data-tmode="power">${tr("power")}</button></div>`;
+  html += `<div class="chips"><button class="chip ${S.tableMode === "table" ? "on" : ""}" data-tmode="table">${tr("table")} ${esc(t.season)}</button><button class="chip ${S.tableMode === "home" ? "on" : ""}" data-tmode="home">${tr("homeAway")}</button><button class="chip ${S.tableMode === "power" ? "on" : ""}" data-tmode="power">${tr("power")}</button><button class="chip ${S.tableMode === "sim" ? "on" : ""}" data-tmode="sim">🎲 ${tr("simMode")}</button></div>`;
+  if (S.tableMode === "sim") {
+    const sim = (S.tables.sims || {})[S.tableComp];
+    if (!sim) return html + `<div class="empty"><b>🎲</b>${tr("noSim")}</div>`;
+    const pc = (x) => (x >= 0.995 ? "✓" : x < 0.005 ? "–" : Math.round(x * 100) + "%");
+    html += `<h3>${tr("simTitle")}</h3><div class="card tbl-wrap"><table><tr><th style="text-align:left">Team</th><th>${tr("expPts")}</th><th>${tr("avgPos")}</th><th>${tr("champ")}</th><th>${tr("top4")}</th><th>${tr("relL")}</th></tr>${sim.teams
+      .map((r) => `<tr><td>${esc(r.team)}</td><td><b>${num(r.pts, 0)}</b></td><td>${num(r.pos, 1)}</td><td class="${r.p1 > 0.2 ? "edge-pos" : ""}">${pc(r.p1)}</td><td>${pc(r.top4)}</td><td style="${r.rel > 0.3 ? "color:var(--bad);font-weight:700" : ""}">${pc(r.rel)}</td></tr>`).join("")}</table></div>
+      <p class="info-note">${tr("simNote", { n: sim.n.toLocaleString(loc()), r: sim.left })}</p>`;
+    return html;
+  }
   if (S.tableMode === "power") {
     const R = (S.tables.ratings || {})[S.tableComp] || [];
     html += `<div class="card tbl-wrap"><table><tr><th>#</th><th>Team</th><th>${tr("goalsPerGame")}</th><th>${tr("conceded")}</th><th>${tr("homePlus")}</th></tr>${R.map((r, i) =>
@@ -475,18 +493,19 @@ function renderDetail(m) {
   const T = m.teams || {};
   const posH = T.home && T.home.pos ? `${t("place", { n: T.home.pos })}` : T.home && T.home.league ? esc(T.home.league) : "";
   const posA = T.away && T.away.pos ? `${t("place", { n: T.away.pos })}` : T.away && T.away.league ? esc(T.away.league) : "";
-  const tabs = ["pred", "form", "h2h", "stats", "corners", "lineup"].map((k) => [k, t("d_" + k)]);
+  const tabs = ["pred", "form", "h2h", "stats", "half", "corners", "cards", "lineup"].map((k) => [k, t("d_" + k)]);
   let html = `<div class="d-head"><small>${c.flag} ${esc(c.name)}${m.round ? " · " + esc(m.round) : ""}</small>
     ${m.derby ? `<div style="margin-top:6px"><span class="badge derby">🔥 ${esc(m.derby)}</span></div>` : ""}
-    <div class="vs"><div class="t">${logo(m.homeLogo)}${esc(m.home)}<small>${posH}</small></div>
+    <div class="vs"><div class="t" data-team="home">${logo(m.homeLogo)}<u>${esc(m.home)}</u><small>${posH}</small></div>
       <div class="mid">${fmtDay(m.kickoff)}<b>${fmtTime(m.kickoff)}</b>${m.venue ? esc(m.venue) : ""}</div>
-      <div class="t">${logo(m.awayLogo)}${esc(m.away)}<small>${posA}</small></div></div></div>
+      <div class="t" data-team="away">${logo(m.awayLogo)}<u>${esc(m.away)}</u><small>${posA}</small></div></div></div>
     <div class="subtabs"><div class="chips">${tabs.map(([k, l]) => `<button class="chip ${detailTab === k ? "on" : ""}" data-dtab="${k}">${l}</button>`).join("")}</div></div>
     <div id="dbody">${detailBody(m)}</div>`;
   const box = $("#sheet-content");
   box.innerHTML = html;
   box.querySelectorAll("[data-dtab]").forEach((b) => b.onclick = () => { detailTab = b.dataset.dtab; renderDetail(m); });
   bindAdds(box);
+  box.querySelectorAll("[data-team]").forEach((el) => el.onclick = () => { if (m.teams && m.teams[el.dataset.team]) openTeam(m, el.dataset.team); });
   const ca = box.querySelector("[data-cadd]");
   if (ca) ca.onclick = () => {
     const txt = box.querySelector("[data-ctext]").value.trim();
@@ -505,7 +524,16 @@ function detailBody(m) {
   if (detailTab === "h2h") return dH2H(m);
   if (detailTab === "stats") return dStats(m);
   if (detailTab === "corners") return dCorners(m);
+  if (detailTab === "half") return dHalf(m);
+  if (detailTab === "cards") return dCards(m);
   return dLineup(m);
+}
+
+function mv(m, k) {
+  const now = m.odds && m.odds[k], open = m.oddsOpen && m.oddsOpen[k];
+  if (!now || !open || Math.abs(now - open) < 0.03) return "";
+  const up = now > open;
+  return `<span class="mv ${up ? "up" : "dn"}" title="${esc(t("oddsMove"))}: ${odd(open)} → ${odd(now)}">${up ? "▲" : "▼"}</span>`;
 }
 
 function oddsCell(o) { return o ? odd(o) : "–"; }
@@ -543,9 +571,9 @@ function dPred(m) {
   }
 
   h += `<h3>${t("x12dc")}</h3><div class="card"><table><tr><th>${t("tip")}</th><th>${t("prob")}</th><th>${t("fairQ")}</th><th>${t("market")}</th><th>${t("edge")}</th></tr>
-    <tr><td>${t("home1")}</td><td data-add="${m.id}|H">${pct(p["1X2"].H, 1)}</td><td>${fair(p["1X2"].H)}</td><td>${oddsCell(o.H)}</td>${edgeCell(p["1X2"].H, o.H)}</tr>
-    <tr><td>${t("drawX")}</td><td data-add="${m.id}|D">${pct(p["1X2"].D, 1)}</td><td>${fair(p["1X2"].D)}</td><td>${oddsCell(o.D)}</td>${edgeCell(p["1X2"].D, o.D)}</tr>
-    <tr><td>${t("away2")}</td><td data-add="${m.id}|A">${pct(p["1X2"].A, 1)}</td><td>${fair(p["1X2"].A)}</td><td>${oddsCell(o.A)}</td>${edgeCell(p["1X2"].A, o.A)}</tr>
+    <tr><td>${t("home1")}</td><td data-add="${m.id}|H">${pct(p["1X2"].H, 1)}</td><td>${fair(p["1X2"].H)}</td><td>${oddsCell(o.H)}${mv(m, "H")}</td>${edgeCell(p["1X2"].H, o.H)}</tr>
+    <tr><td>${t("drawX")}</td><td data-add="${m.id}|D">${pct(p["1X2"].D, 1)}</td><td>${fair(p["1X2"].D)}</td><td>${oddsCell(o.D)}${mv(m, "D")}</td>${edgeCell(p["1X2"].D, o.D)}</tr>
+    <tr><td>${t("away2")}</td><td data-add="${m.id}|A">${pct(p["1X2"].A, 1)}</td><td>${fair(p["1X2"].A)}</td><td>${oddsCell(o.A)}${mv(m, "A")}</td>${edgeCell(p["1X2"].A, o.A)}</tr>
     <tr><td>1X</td><td data-add="${m.id}|1X">${pct(p.DC["1X"], 1)}</td><td>${fair(p.DC["1X"])}</td><td></td><td></td></tr>
     <tr><td>X2</td><td data-add="${m.id}|X2">${pct(p.DC.X2, 1)}</td><td>${fair(p.DC.X2)}</td><td></td><td></td></tr>
     <tr><td>12</td><td data-add="${m.id}|12">${pct(p.DC["12"], 1)}</td><td>${fair(p.DC["12"])}</td><td></td><td></td></tr></table></div>`;
@@ -672,9 +700,203 @@ function dLineup(m) {
   return h;
 }
 
+/* ------------------------------------------------------------ Halbzeit */
+function dHalf(m) {
+  const H = m.ht;
+  if (!H) return `<div class="empty"><b>⏱️</b>${t("tooLittle")}</div>`;
+  let h = `<div class="grid3"><div class="stat"><small>${esc(m.home)}</small><b>${num(H.xg[0], 2)}</b></div><div class="stat"><small>${t("htxg")}</small><b>${num(H.xg[0] + H.xg[1], 2)}</b></div><div class="stat"><small>${esc(m.away)}</small><b>${num(H.xg[1], 2)}</b></div></div>`;
+  h += `<h3>${t("ht1x2")}</h3><div class="probs">${[["HTH", "H", "1", "h"], ["HTD", "D", "X", "d"], ["HTA", "A", "2", "a"]].map(([k, x, l, c]) =>
+    `<button class="pt ${c}" style="--w:${Math.round(H["1X2"][x] * 100)}%" data-add="${esc(m.id)}|${k}"><span class="k">${l}</span><span class="v">${Math.round(H["1X2"][x] * 100)}<small>%</small></span><span class="o">${fair(H["1X2"][x])}<em>+</em></span></button>`).join("")}</div>`;
+  h += `<h3>${t("htOU")}</h3><div class="card"><table><tr><th>${t("line")}</th><th>${t("over")}</th><th>${t("fairQ")}</th><th>${t("under")}</th><th>${t("fairQ")}</th></tr>${Object.entries(H.OU)
+    .map(([l, v]) => `<tr><td>${num(l, 1)}</td><td data-add="${esc(m.id)}|HO${l.replace(".", "")}">${pct(v.O)}</td><td>${fair(v.O)}</td><td data-add="${esc(m.id)}|HU${l.replace(".", "")}">${pct(v.U)}</td><td>${fair(v.U)}</td></tr>`).join("")}</table></div>`;
+  const order = ["1/1", "X/1", "2/1", "1/X", "X/X", "2/X", "1/2", "X/2", "2/2"];
+  const best = order.reduce((a, b) => (H.HTFT[b] > H.HTFT[a] ? b : a));
+  h += `<h3>${t("htft")}</h3><div class="grid3">${order.map((k) => `<div class="stat" data-add="${esc(m.id)}|HTFT:${k}" style="${k === best ? "border-color:var(--home)" : ""}"><small>${k}</small><b>${pct(H.HTFT[k])}</b><i>${fair(H.HTFT[k])}</i></div>`).join("")}</div><small>${t("htftNote")}</small>`;
+  h += `<h3>${t("moreGoalsHalf")}</h3><div class="bar"><div class="h" style="flex:${H.more["1"]}">${pct(H.more["1"])}</div><div class="d" style="flex:${H.more.E}">${pct(H.more.E)}</div><div class="a" style="flex:${H.more["2"]}">${pct(H.more["2"])}</div></div>
+    <div class="row-between" style="font-size:12px;color:var(--muted);margin-top:4px"><span>${t("firstHalf")}</span><span>${t("equal")}</span><span>${t("secondHalf")}</span></div>`;
+  return h;
+}
+
+/* ------------------------------------------------------------ Karten */
+function dCards(m) {
+  const c = m.cards, T = m.teams || {};
+  const ch = T.home && T.home.cards, ca = T.away && T.away.cards;
+  if (!c && !ch && !ca) return `<div class="empty"><b>🟨</b>${t("noCards")}</div>`;
+  const rec = (title, r) => !r ? "" : `<div class="stat" style="text-align:left"><small>${title} · ${t("games_s", { n: r.n })}</small><b>${num(r.for, 1)} : ${num(r.against, 1)}</b><i>${t("cardsTotal")} Ø ${num(r.total, 1)} · ${t("o45share")} ${r.o95}%</i></div>`;
+  let h = "";
+  if (c) {
+    h += `<div class="grid3"><div class="stat"><small>${esc(m.home)}</small><b>${num(c.exp[0], 1)}</b></div><div class="stat"><small>${t("expCards")}</small><b>${num(c.total, 1)}</b></div><div class="stat"><small>${esc(m.away)}</small><b>${num(c.exp[1], 1)}</b></div></div>`;
+    h += `<h3>${t("moreCards")}</h3><div class="bar"><div class="h" style="flex:${c.more.H}">${pct(c.more.H)}</div><div class="d" style="flex:${c.more.E}">${pct(c.more.E)}</div><div class="a" style="flex:${c.more.A}">${pct(c.more.A)}</div></div>
+      <div class="row-between" style="font-size:12px;color:var(--muted);margin-top:4px"><span>${esc(m.home)}</span><span>${t("equal")}</span><span>${esc(m.away)}</span></div>`;
+    h += `<h3>${t("cardsOU")}</h3><div class="card"><table><tr><th>${t("line")}</th><th>${t("over")}</th><th>${t("fairQ")}</th><th>${t("under")}</th><th>${t("fairQ")}</th></tr>${Object.entries(c.OU)
+      .map(([l, v]) => `<tr class="${l === "4.5" ? "hl" : ""}"><td>${num(l, 1)}</td><td data-add="${esc(m.id)}|KO${l.replace(".", "")}">${pct(v.O)}</td><td>${fair(v.O)}</td><td data-add="${esc(m.id)}|KU${l.replace(".", "")}">${pct(v.U)}</td><td>${fair(v.U)}</td></tr>`).join("")}</table></div>`;
+    h += `<div class="note">${t("cardsNote")}</div>`;
+  }
+  h += `<h3>${t("cardsFor")} : ${t("cardsAgainst")} · ${t("thisSeason")}</h3><div class="grid2">${rec(t("cornersHomeT", { t: esc(m.home) }), ch && ch.season && ch.season.home)}${rec(t("cornersAwayT", { t: esc(m.away) }), ca && ca.season && ca.season.away)}</div>`;
+  h += `<h3>${t("cardsFor")} : ${t("cardsAgainst")} · ${t("last5y")}</h3><div class="grid2">${rec(t("cornersHomeT", { t: esc(m.home) }), ch && ch.all && ch.all.home)}${rec(t("cornersAwayT", { t: esc(m.away) }), ca && ca.all && ca.all.away)}</div>`;
+  for (const [x, name] of [[ch, m.home], [ca, m.away]]) {
+    if (!x || !x.last || !x.last.length) continue;
+    h += `<h3>${t("lastCards", { t: esc(name) })}</h3><div class="card">${x.last.map((i) => `<div class="formrow"><small>${fmtShort(i.d)}</small><span class="opp">${i.v === "H" ? "vs" : "@"} ${esc(i.opp)}</span><span class="sc">${i.cf}:${i.ca}</span></div>`).join("")}</div>`;
+  }
+  return h;
+}
+
+/* ------------------------------------------------------------ Team-Seite */
+function formChart(items) {
+  if (!items || !items.length) return "";
+  const L = [...items].reverse(), w = 320, hgt = 130, bw = w / L.length, mid = 66, u = 13;
+  let svg = `<svg viewBox="0 0 ${w} ${hgt}" width="100%" role="img" aria-label="${esc(t("formCurve"))}"><line x1="0" x2="${w}" y1="${mid}" y2="${mid}" stroke="var(--line)"/>`;
+  L.forEach((g, i) => {
+    const x = i * bw + bw * 0.2, bwi = bw * 0.6;
+    const col = g.r === "S" ? "var(--home)" : g.r === "U" ? "var(--draw)" : "var(--bad)";
+    svg += `<rect x="${x}" y="${mid - Math.min(g.gf, 4) * u}" width="${bwi}" height="${Math.min(g.gf, 4) * u}" rx="3" fill="var(--home)" opacity=".85"/>`;
+    svg += `<rect x="${x}" y="${mid}" width="${bwi}" height="${Math.min(g.ga, 4) * u}" rx="3" fill="var(--bad)" opacity=".7"/>`;
+    svg += `<circle cx="${x + bwi / 2}" cy="${hgt - 6}" r="5" fill="${col}"/>`;
+  });
+  return svg + `</svg><div class="row-between" style="font-size:12px;color:var(--muted)"><span>▲ ${t("goals")} · ▼ ${t("conceded")}</span><span>${fmtShort(L[0].d)} → ${fmtShort(L[L.length - 1].d)}</span></div>`;
+}
+
+function openTeam(m, side) {
+  const B = m.teams[side], name = side === "home" ? m.home : m.away, key = B.name || name;
+  const logoU = side === "home" ? m.homeLogo : m.awayLogo;
+  const comp = m.comp in (S.tables && S.tables.tables || {}) ? m.comp : null;
+  let h = `<div class="d-head"><button class="btn small" data-back>${t("back")}</button>
+    <div class="t" style="margin-top:12px;display:flex;flex-direction:column;align-items:center;gap:6px;font:700 26px/1.1 var(--display)">${logo(logoU)}${esc(name)}<small style="font:500 13px var(--body)">${[B.league ? esc(B.league) : esc((S.comps[m.comp] || {}).name || ""), B.pos ? t("place", { n: B.pos }) : ""].filter(Boolean).join(" · ")}</small></div></div>`;
+  const simComp = B.league ? Object.keys(S.comps).find((k) => S.comps[k].name === B.league) : comp;
+  const sim = S.tables && S.tables.sims && S.tables.sims[simComp || m.comp];
+  const sr = sim && sim.teams.find((x) => x.team === key);
+  if (sr) h += `<div class="grid3"><div class="stat"><small>${t("expPts")}</small><b>${num(sr.pts, 0)}</b></div><div class="stat"><small>${t("champ")}</small><b>${Math.round(sr.p1 * 100)}%</b></div><div class="stat"><small>${t("relL")}</small><b>${Math.round(sr.rel * 100)}%</b></div></div>`;
+  h += `<h3>${t("formCurve")}</h3><div class="card">${formChart(B.last10 || B.form)}</div>`;
+  h += formStats(name, B.formSum);
+  h += `<h3>${t("thisSeason")}</h3><div class="grid2">${recCard(t("atHome", { t: "" }).trim(), B.homeRec)}${recCard(t("awayL", { t: "" }).trim(), B.awayRec)}</div>`;
+  h += `<h3>${t("last5y")}</h3><div class="grid2">${recCard(t("atHome", { t: "" }).trim(), B.homeRec5y)}${recCard(t("awayL", { t: "" }).trim(), B.awayRec5y)}</div>`;
+  const cs = B.corners && B.corners.all, ks = B.cards && B.cards.all;
+  if (cs || ks) h += `<h3>${t("d_corners")} / ${t("d_cards")} · ${t("last5y")}</h3><div class="grid2">${cs && cs.home ? cornerRec("🚩 " + t("atHome", { t: "" }).trim(), cs.home) : ""}${cs && cs.away ? cornerRec("🚩 " + t("awayL", { t: "" }).trim(), cs.away) : ""}${ks && ks.home ? cornerRec("🟨 " + t("atHome", { t: "" }).trim(), ks.home).replace(t("o95share"), t("o45share")) : ""}${ks && ks.away ? cornerRec("🟨 " + t("awayL", { t: "" }).trim(), ks.away).replace(t("o95share"), t("o45share")) : ""}</div>`;
+  const next = S.matches.filter((x) => (x.hk === key || x.ak === key || x.home === name || x.away === name) && x.id !== m.id);
+  if (next.length) h += `<h3>${t("nextGames")}</h3>` + next.map(matchCard).join("");
+  const past = ((S.results && S.results.matches) || []).filter((x) => x.hk === key || x.ak === key || x.home === name || x.away === name);
+  if (past.length) h += `<h3>${t("pastPreds")}</h3>` + past.slice(0, 8).map(resultCard).join("");
+  const box = $("#sheet-content");
+  box.innerHTML = h;
+  box.parentElement.scrollTop = 0;
+  box.querySelector("[data-back]").onclick = () => renderDetail(m);
+  box.querySelectorAll("[data-match]").forEach((el) => el.onclick = () => { const mm = S.matches.find((x) => x.id === el.dataset.match); if (mm) { detailTab = "pred"; renderDetail(mm); box.parentElement.scrollTop = 0; } });
+  bindAdds(box);
+}
+
+/* ------------------------------------------------------------ Kombi-Generator */
+const KTARGETS = [[1.5, 2], [2, 3], [3, 5], [5, 10], [10, 25]];
+
+function kombiCandidates() {
+  const now = Date.now(), legs = [];
+  for (const m of S.matches) {
+    if (!vis(m.comp) || !m.picks || dt(m.kickoff) < now) continue;
+    if (S.pickDay && S.pickDay !== "all" && dayKey(m.kickoff) !== S.pickDay) continue;
+    for (const p of m.picks) {
+      if (p.p < S.pickMin || !S.pickGroups.has(p.g)) continue;
+      const est = !p.odds;
+      const o = p.odds || +(p.fair * 0.95).toFixed(2);
+      if (o < 1.05) continue;
+      legs.push({ m, p, o, est, eff: -Math.log(p.p) / Math.log(o) });
+    }
+  }
+  return legs.sort((a, b) => a.eff - b.eff);
+}
+
+function buildKombis(cands, lo, hi, maxL) {
+  const pool = cands.slice(0, maxL > 4 ? 22 : 30), found = [];
+  const rec = (start, legs, o, p, used) => {
+    if (o >= lo && o <= hi && legs.length >= 2) found.push({ legs: [...legs], o, p });
+    if (legs.length >= maxL) return;
+    for (let i = start; i < pool.length; i++) {
+      const c = pool[i];
+      if (used.has(c.m.id) || o * c.o > hi) continue;
+      used.add(c.m.id); legs.push(c);
+      rec(i + 1, legs, o * c.o, p * c.p.p, used);
+      legs.pop(); used.delete(c.m.id);
+    }
+  };
+  rec(0, [], 1, 1, new Set());
+  found.sort((a, b) => b.p - a.p);
+  const out = [], seen = new Set();
+  for (const f of found) {
+    const sig = f.legs.map((l) => l.m.id).sort().join();
+    if (seen.has(sig)) continue;
+    seen.add(sig); out.push(f);
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+
+function viewKombi() {
+  let html = pickModeChips();
+  S.kT = S.kT ?? 1; S.kL = S.kL ?? 4;
+  const days = [...new Set(S.matches.filter((m) => m.picks && m.picks.length && dt(m.kickoff) > Date.now()).map((m) => dayKey(m.kickoff)))];
+  if (!S.pickDay || (S.pickDay !== "all" && !days.includes(S.pickDay))) S.pickDay = days[0] || "all";
+  const today = dayKey(new Date()), tomorrow = dayKey(Date.now() + 864e5);
+  const dl = (k) => k === today ? t("today") : k === tomorrow ? t("tomorrow")
+    : dt(S.matches.find((x) => dayKey(x.kickoff) === k).kickoff).toLocaleDateString(loc(), { weekday: "short", day: "2-digit", month: "2-digit" });
+  html += `<div class="chips">${days.map((k) => `<button class="chip ${S.pickDay === k ? "on" : ""}" data-pday="${k}">${dl(k)}</button>`).join("")}<button class="chip ${S.pickDay === "all" ? "on" : ""}" data-pday="all">${t("allDays")}</button></div>`;
+  html += `<div class="chips"><span style="align-self:center;color:var(--muted);font-size:14px">${t("targetOdds")}</span>${KTARGETS.map(([a, b], i) => `<button class="chip ${S.kT === i ? "on" : ""}" data-kt="${i}">${num(a, 1)}–${num(b, 0)}</button>`).join("")}</div>`;
+  html += `<div class="chips">${[2, 3, 4, 5, 6].map((n) => `<button class="chip ${S.kL === n ? "on" : ""}" data-kl="${n}">${t("maxLegs", { n })}</button>`).join("")}</div>`;
+  html += `<div class="chips">${["1X2", "DC", "Goals", "BTTS", "Half", "Corners", "Cards"].map((g) => `<button class="chip ${S.pickGroups.has(g) ? "on" : ""}" data-pgroup="${g}">${t("g_" + g)}</button>`).join("")}</div>`;
+  html += `<div class="info-note">${t("kombiExplain")}</div>`;
+  const [lo, hi] = KTARGETS[S.kT];
+  const res = buildKombis(kombiCandidates(), lo, hi, S.kL);
+  if (!res.length) return html + `<div class="empty"><b>🧩</b>${t("kombiNone")}</div>`;
+  res.forEach((k, i) => {
+    if (i === 1) html += `<h3>${t("alternatives")}</h3>`;
+    html += `<div class="card"><div class="row-between"><b style="font:700 26px var(--display)">${odd(k.o)}</b><span>${t("kombiChance")} <b class="${k.p >= 0.4 ? "src-ok" : ""}">${pct(k.p, 1)}</b></span></div>
+      ${k.legs.map((l) => { const c = S.comps[l.m.comp] || { flag: "" }; return `<div class="formrow"><span class="opp"><b>${esc(t("pk_" + l.p.k))}</b><br><small>${c.flag} ${esc(l.m.home)} – ${esc(l.m.away)} · ${fmtTime(l.m.kickoff)}</small></span><span style="text-align:right">${pct(l.p.p)}<br><small>${odd(l.o)}${l.est ? " ≈" : ""}</small></span></div>`; }).join("")}
+      <button class="btn primary" style="width:100%;margin-top:10px" data-kadd="${i}">🧾 ${t("kombiAdd")}</button></div>`;
+  });
+  S._kombis = res;
+  return html + `<p class="info-note">${t("noModelSafe")}</p>`;
+}
+
+/* ------------------------------------------------------------ Wett-Bilanz */
+function keyGroup(k) {
+  if (k === "CUSTOM") return "Other";
+  if (["H", "D", "A"].includes(k)) return "1X2";
+  if (["1X", "X2", "12"].includes(k)) return "DC";
+  if (/^[OU]\d+$/.test(k)) return "Goals";
+  if (k.startsWith("BTTS")) return "BTTS";
+  if (/^C[OU]/.test(k)) return "Corners";
+  if (/^K[OU]/.test(k)) return "Cards";
+  if (k.startsWith("HTFT")) return "HTFT";
+  if (/^H[OU]/.test(k) || k.startsWith("HT")) return "Half";
+  if (k.startsWith("AH")) return "AH";
+  return "Other";
+}
+
+function betStats(states) {
+  const settled = SLIP.bets.map((b, i) => ({ b, s: states[i] })).filter((x) => x.s.st !== "open").reverse();
+  if (!settled.length) return "";
+  let cum = 0;
+  const pts = [0, ...settled.map((x) => (cum += (x.s.payout || 0) - x.b.stake))];
+  const w = 320, hgt = 120, mn = Math.min(0, ...pts), mx = Math.max(0, ...pts), rng = mx - mn || 1;
+  const X = (i) => (i / Math.max(1, pts.length - 1)) * (w - 10) + 5, Y = (v) => hgt - 8 - ((v - mn) / rng) * (hgt - 16);
+  const path = pts.map((v, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join("");
+  const last = pts[pts.length - 1];
+  let h = `<h3>${t("profitCurve")}</h3><div class="card"><svg viewBox="0 0 ${w} ${hgt}" width="100%"><line x1="0" x2="${w}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--line)" stroke-dasharray="4 4"/><path d="${path}" fill="none" stroke="${last >= 0 ? "var(--home)" : "var(--bad)"}" stroke-width="2.5" stroke-linejoin="round"/>${pts.map((v, i) => i ? `<circle cx="${X(i)}" cy="${Y(v)}" r="3" fill="${last >= 0 ? "var(--home)" : "var(--bad)"}"/>` : "").join("")}</svg></div>`;
+  const agg = (fn) => {
+    const g = {};
+    for (const { b, s } of settled) {
+      const k = fn(b), x = g[k] || (g[k] = { n: 0, w: 0, st: 0, ret: 0 });
+      x.n++; x.st += b.stake; x.ret += s.payout || 0; if (s.st === "won" || s.st === "halfWon") x.w++;
+    }
+    return Object.entries(g).sort((a, b) => b[1].n - a[1].n);
+  };
+  const tbl = (title, rows, lab) => `<h3>${title}</h3><div class="card tbl-wrap"><table><tr><th>&nbsp;</th><th>${t("bets")}</th><th>${t("hit")}</th><th>${t("profit")}</th></tr>${rows.map(([k, x]) => {
+    const pl = x.ret - x.st; return `<tr><td>${lab(k)}</td><td>${x.n}</td><td>${Math.round((x.w / x.n) * 100)}%</td><td class="${pl >= 0 ? "edge-pos" : ""}" style="${pl < 0 ? "color:var(--bad)" : ""}">${pl >= 0 ? "+" : ""}${num(pl, 2)}</td></tr>`; }).join("")}</table></div>`;
+  h += tbl(t("byLeague"), agg((b) => (b.legs.length > 1 ? "_combo" : b.legs[0].comp)), (k) => k === "_combo" ? t("g_Combo") : `${(S.comps[k] || {}).flag || ""} ${esc((S.comps[k] || { name: k }).name)}`);
+  h += tbl(t("byMarket"), agg((b) => (b.legs.length > 1 ? "Combo" : keyGroup(b.legs[0].key))), (k) => t("g_" + k) !== "g_" + k ? t("g_" + k) : k);
+  return h;
+}
+
 /* ------------------------------------------------------------ Kupon / Meine Wetten */
 const FAVS = new Set(store.get("favs", []));
-const SLIP = { legs: store.get("slip", []), type: store.get("slipType", "combo"), stake: store.get("slipStake", 10), bets: store.get("bets", []), view: "slip" };
+const SLIP = { bankroll: store.get("bankroll", null), legs: store.get("slip", []), type: store.get("slipType", "combo"), stake: store.get("slipStake", 10), bets: store.get("bets", []), view: "slip" };
 const saveSlip = () => { store.set("slip", SLIP.legs); store.set("slipType", SLIP.type); store.set("slipStake", SLIP.stake); };
 const saveBets = () => store.set("bets", SLIP.bets);
 const pnum = (v) => { const x = parseFloat(String(v).replace(",", ".")); return isNaN(x) ? null : x; };
@@ -701,6 +923,10 @@ function selInfo(m, key) {
   else if (/^[OU]\d+$/.test(key)) { const l = lineOf(key.slice(1)); const v = p.OU && p.OU[l]; pr = v && v[key[0]]; if (l === "2.5") odds = o[key[0] + "25"]; g = "Goals"; }
   else if (key === "BTTSY" || key === "BTTSN") { pr = p.BTTS && p.BTTS[key.slice(4)]; odds = o[key]; g = "BTTS"; }
   else if (/^C[OU]\d+$/.test(key)) { const l = lineOf(key.slice(2)); const v = c.OU && c.OU[l]; pr = v && v[key[1]]; g = "Corners"; }
+  else if (/^K[OU]\d+$/.test(key)) { const l = lineOf(key.slice(2)); const v = m.cards && m.cards.OU[l]; pr = v && v[key[1]]; g = "Cards"; }
+  else if (/^H[OU]\d+$/.test(key)) { const l = lineOf(key.slice(2)); const v = m.ht && m.ht.OU[l]; pr = v && v[key[1]]; g = "Half"; }
+  else if (["HTH", "HTD", "HTA"].includes(key)) { pr = m.ht && m.ht["1X2"][key[2]]; g = "Half"; }
+  else if (key.startsWith("HTFT:")) { pr = m.ht && m.ht.HTFT[key.slice(5)]; g = "HTFT"; }
   else if (key.startsWith("AH:")) {
     const [, side, ls] = key.split(":"); const line = +ls;
     const row = (p.AH || []).find((a) => Math.abs(a.line - line) < 1e-9);
@@ -718,6 +944,10 @@ function selLabel(leg) {
   if (["H", "D", "A", "1X", "X2", "12", "BTTSY", "BTTSN"].includes(k)) return t("s_" + k, { h, a });
   if (/^[OU]\d+$/.test(k)) return t("s_" + k[0], { l: ln(k.slice(1)) });
   if (/^C[OU]\d+$/.test(k)) return t("s_" + k.slice(0, 2), { l: ln(k.slice(2)) });
+  if (/^K[OU]\d+$/.test(k)) return t("s_" + k.slice(0, 2), { l: ln(k.slice(2)) });
+  if (/^H[OU]\d+$/.test(k)) return t("s_" + k.slice(0, 2), { l: ln(k.slice(2)) });
+  if (["HTH", "HTD", "HTA"].includes(k)) return t("s_" + k, { h, a });
+  if (k.startsWith("HTFT:")) return t("s_HTFT", { x: k.slice(5) });
   if (k.startsWith("AH:")) { const [, side, ls] = k.split(":"); const l = side === "H" ? +ls : -ls; return t("s_AH", { t: side === "H" ? h : a, l: ahFmt(l) }); }
   return k;
 }
@@ -755,6 +985,21 @@ function legOutcome(leg) {
     BTTSY: hg > 0 && ag > 0, BTTSN: !(hg > 0 && ag > 0) };
   if (k in simple) return win(simple[k]);
   if (/^[OU]\d+$/.test(k)) { const l = parseInt(k.slice(1), 10) / 10; return win(k[0] === "O" ? tot > l : tot < l); }
+  if (/^K[OU]\d+$/.test(k)) {
+    if (r.hy == null || r.ay == null) return { st: "open" };
+    const cards = r.hy + r.ay + (r.hr || 0) + (r.ar || 0); const l = parseInt(k.slice(2), 10) / 10;
+    return win(k[1] === "O" ? cards > l : cards < l);
+  }
+  if (/^H[OU]\d+$/.test(k) || ["HTH", "HTD", "HTA"].includes(k) || k.startsWith("HTFT:")) {
+    if (r.hthg == null || r.htag == null) return { st: "open" };
+    const h1 = r.hthg, a1 = r.htag, l = parseInt(k.slice(2), 10) / 10;
+    const sg = (x, y) => (x > y ? "1" : x === y ? "X" : "2");
+    if (k === "HTH") return win(h1 > a1);
+    if (k === "HTD") return win(h1 === a1);
+    if (k === "HTA") return win(h1 < a1);
+    if (k.startsWith("HTFT:")) return win(k.slice(5) === sg(h1, a1) + "/" + sg(hg, ag));
+    return win(k[1] === "O" ? h1 + a1 > l : h1 + a1 < l);
+  }
   if (/^C[OU]\d+$/.test(k)) {
     if (hc == null || ac == null) return { st: "open" };
     const l = parseInt(k.slice(2), 10) / 10; return win(k[1] === "O" ? hc + ac > l : hc + ac < l);
@@ -793,6 +1038,14 @@ function openCoupon() {
 function stIcon(st) { return { won: "✅", lost: "❌", open: "⏳", void: "↩️", halfWon: "✅½", halfLost: "❌½" }[st] || "⏳"; }
 function stText(st) { return t(st === "halfWon" ? "halfWon" : st === "halfLost" ? "halfLost" : st); }
 
+function kellyHtml(p, o) {
+  if (!SLIP.bankroll || !p || !o || o <= 1) return "";
+  const f = (p * o - 1) / (o - 1);
+  if (f <= 0) return `<div class="row-between"><small>${t("kellyRec")}</small><small class="src-bad">${t("kellyNone")}</small></div>`;
+  const st = Math.max(0, Math.round(SLIP.bankroll * f / 4 * 2) / 2);
+  return `<div class="card" style="margin:8px 0 0;padding:10px 12px;background:var(--card2)"><small>${t("kellyRec")} (¼ Kelly)</small><div class="row-between"><b class="src-ok" style="font:700 24px var(--display)">${num(st, 2)}</b><button class="btn small" data-kapply="${st}">${t("apply")}</button></div></div>`;
+}
+
 function slipSummary() {
   const L = SLIP.legs;
   if (!L.length) return "";
@@ -804,8 +1057,9 @@ function slipSummary() {
     return `<div class="row-between"><span>${t("totalOdds")}</span><b>${odd(tot)}</b></div>
       <div class="row-between"><span>${t("potWin")}</span><b class="src-ok">${num(stake * tot, 2)}</b></div>
       ${pp ? `<div class="row-between"><span>${t("modelChance")}</span><b>${pct(pp, 1)}</b></div>
-      <div class="row-between"><span>${t("ev")}</span><b class="${ev >= 0 ? "src-ok" : "src-bad"}">${ev >= 0 ? "+" : ""}${num(ev * 100, 1)}%</b></div>` : ""}`;
+      <div class="row-between"><span>${t("ev")}</span><b class="${ev >= 0 ? "src-ok" : "src-bad"}">${ev >= 0 ? "+" : ""}${num(ev * 100, 1)}%</b></div>` : ""}${kellyHtml(pp, tot)}`;
   }
+  if (L.length === 1) return `<div class="row-between"><span>${t("potWin")}</span><b class="src-ok">${num(stake * (L[0].odds || 0), 2)}</b></div>${L[0].p ? `<div class="row-between"><span>${t("ev")}</span><b class="${L[0].p * L[0].odds >= 1 ? "src-ok" : "src-bad"}">${L[0].p * L[0].odds >= 1 ? "+" : ""}${num((L[0].p * L[0].odds - 1) * 100, 1)}%</b></div>` : ""}${kellyHtml(L[0].p, L[0].odds)}`;
   return L.map((l) => `<div class="row-between"><span>${esc(selLabel(l))}</span><b>${num(stake * (l.odds || 0), 2)}</b></div>`).join("")
     + `<div class="row-between"><span>${t("stake")}</span><b>${num(stake * L.length, 2)}</b></div>`;
 }
@@ -828,7 +1082,8 @@ function renderCoupon() {
       }).join("")}<small>✏️ ${t("oddsHint")}</small></div>`;
       if (n > 1) h += `<div class="chips"><button class="chip ${SLIP.type === "combo" ? "on" : ""}" data-ctype="combo">${t("combo")}</button><button class="chip ${SLIP.type === "single" ? "on" : ""}" data-ctype="single">${t("single")}</button></div>`;
       h += `<div class="card"><div class="row-between"><span>${SLIP.type === "single" && n > 1 ? t("stakeEach") : t("stake")}</span><input class="oddin" inputmode="decimal" data-stake value="${num(SLIP.stake, 2)}"></div>
-        <div id="slipSum" style="margin-top:8px">${slipSummary()}</div></div>
+        <div class="row-between" style="margin-top:8px"><span>${t("bankroll")}</span><input class="oddin" inputmode="decimal" data-bank value="${SLIP.bankroll ? num(SLIP.bankroll, 0) : ""}" placeholder="500"></div>
+        <div id="slipSum" style="margin-top:8px">${slipSummary()}</div>${SLIP.bankroll ? `<small>${t("kellyNote")}</small>` : ""}</div>
         <div class="row-between" style="margin-top:10px"><button class="btn" data-cclear>${t("clear")}</button><button class="btn primary" data-csave>${t("saveBet")}</button></div>`;
     }
   } else {
@@ -841,6 +1096,7 @@ function renderCoupon() {
       const pl = ret - settledStake;
       h += `<div class="grid3"><div class="stat"><small>${t("staked")}</small><b>${num(st, 2)}</b></div><div class="stat"><small>${t("returned")}</small><b>${num(ret, 2)}</b></div><div class="stat"><small>${t("profit")}</small><b class="${pl >= 0 ? "src-ok" : "src-bad"}">${pl >= 0 ? "+" : ""}${num(pl, 2)}</b></div></div>`;
       if (done) h += `<small>${t("hitRate")}: ${Math.round((wins / done) * 100)}% (${wins}/${done})</small>`;
+      h += betStats(states);
       SLIP.bets.forEach((b, i) => {
         const s2 = states[i];
         h += `<div class="card betcard ${s2.st === "won" || s2.st === "halfWon" ? "won" : s2.st === "lost" || s2.st === "halfLost" ? "lost" : ""}" style="margin-top:8px">
@@ -859,6 +1115,9 @@ function renderCoupon() {
   box.querySelectorAll("[data-odd]").forEach((el) => el.oninput = () => {
     const v = pnum(el.value); if (v && v >= 1) { SLIP.legs[+el.dataset.odd].odds = v; saveSlip(); $("#slipSum").innerHTML = slipSummary(); }
   });
+  const bk = box.querySelector("[data-bank]");
+  if (bk) bk.onchange = () => { const v = pnum(bk.value); SLIP.bankroll = v && v > 0 ? v : null; store.set("bankroll", SLIP.bankroll); renderCoupon(); };
+  box.onclick = (e) => { const a = e.target.closest("[data-kapply]"); if (a) { SLIP.stake = +a.dataset.kapply; saveSlip(); renderCoupon(); } };
   const sk = box.querySelector("[data-stake]");
   if (sk) sk.oninput = () => { const v = pnum(sk.value); if (v != null && v >= 0) { SLIP.stake = v; saveSlip(); $("#slipSum").innerHTML = slipSummary(); } };
   const cl = box.querySelector("[data-cclear]");

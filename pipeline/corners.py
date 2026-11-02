@@ -1,22 +1,24 @@
-"""Eckbälle: Statistik je Team (Heim/Auswärts) und Prognose (negativ-binomial)."""
+"""Zähl-Statistiken (Ecken, Karten): Werte je Team (Heim/Auswärts) und Prognose (negativ-binomial)."""
 import math
 
 import numpy as np
 from scipy.stats import nbinom, poisson
 
 LINES = (7.5, 8.5, 9.5, 10.5, 11.5, 12.5)
+CARD_LINES = (2.5, 3.5, 4.5, 5.5, 6.5)
 SHRINK = 20  # Spiele, mit denen zum Ligaschnitt gezogen wird (Ecken sind schwer vorherzusagen)
 
 
-def has_corners(df, min_games=150):
-    return df["hc"].notna().sum() >= min_games
+def has_corners(df, min_games=150, hcol="hc"):
+    return df[hcol].notna().sum() >= min_games
 
 
 class CornerModel:
     """Pro Liga: Heim-/Auswärts-Eckenwerte je Team (aktuelle Saison voll, Vorsaison halb gewichtet)."""
 
-    def __init__(self, df, cur):
-        d = df[df["hc"].notna() & df["ac"].notna() & (df["season"] >= cur - 1)].copy()
+    def __init__(self, df, cur, hcol="hc", acol="ac"):
+        d = df[df[hcol].notna() & df[acol].notna() & (df["season"] >= cur - 1)].copy()
+        d["hc"], d["ac"] = d[hcol], d[acol]
         d["w"] = np.where(d["season"] == cur, 1.0, 0.5)
         self.ok = len(d) >= 100
         if not self.ok:
@@ -56,10 +58,10 @@ class CornerModel:
         return self.A * x["af"], self.H * x["aa"]
 
 
-def markets(lh, la, r=None):
+def markets(lh, la, r=None, lines=LINES):
     lam = lh + la
     out = {"exp": [round(lh, 2), round(la, 2)], "total": round(lam, 2), "OU": {}}
-    for line in LINES:
+    for line in lines:
         k = math.floor(line)
         if r:
             p = r / (r + lam)
@@ -78,9 +80,10 @@ def markets(lh, la, r=None):
     return out
 
 
-def team_stats(df, team, cur):
-    """Ecken-Statistik eines Teams: diese Saison und 5 Jahre, getrennt Heim/Auswärts, letzte 5."""
-    d = df[df["hc"].notna() & df["ac"].notna()]
+def team_stats(df, team, cur, hcol="hc", acol="ac", ref=9.5):
+    """Statistik eines Teams: diese Saison und 5 Jahre, getrennt Heim/Auswärts, letzte 5."""
+    d = df[df[hcol].notna() & df[acol].notna()].copy()
+    d["hc"], d["ac"] = d[hcol], d[acol]
     if d.empty:
         return None
 
@@ -90,12 +93,12 @@ def team_stats(df, team, cur):
             res["home"] = {"n": int(len(sub_h)), "for": round(float(sub_h["hc"].mean()), 2),
                            "against": round(float(sub_h["ac"].mean()), 2),
                            "total": round(float((sub_h["hc"] + sub_h["ac"]).mean()), 2),
-                           "o95": round(float(((sub_h["hc"] + sub_h["ac"]) > 9.5).mean()) * 100)}
+                           "o95": round(float(((sub_h["hc"] + sub_h["ac"]) > ref).mean()) * 100)}
         if len(sub_a):
             res["away"] = {"n": int(len(sub_a)), "for": round(float(sub_a["ac"].mean()), 2),
                            "against": round(float(sub_a["hc"].mean()), 2),
                            "total": round(float((sub_a["hc"] + sub_a["ac"]).mean()), 2),
-                           "o95": round(float(((sub_a["hc"] + sub_a["ac"]) > 9.5).mean()) * 100)}
+                           "o95": round(float(((sub_a["hc"] + sub_a["ac"]) > ref).mean()) * 100)}
         return res or None
 
     h_all, a_all = d[d["home"] == team], d[d["away"] == team]

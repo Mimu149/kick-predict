@@ -81,11 +81,13 @@ def api_results(api, days_back=1):
             if fx["fixture"]["status"]["short"] not in FINISHED_API:
                 continue
             ft = (fx.get("score") or {}).get("fulltime") or {}
+            htx = (fx.get("score") or {}).get("halftime") or {}
             hg = ft.get("home") if ft.get("home") is not None else fx["goals"]["home"]
             ag = ft.get("away") if ft.get("away") is not None else fx["goals"]["away"]
             if hg is None or ag is None:
                 continue
             out.append({"apiId": fx["fixture"]["id"], "hg": int(hg), "ag": int(ag),
+                        "hthg": htx.get("home"), "htag": htx.get("away"),
                         "home": fx["teams"]["home"]["name"], "away": fx["teams"]["away"]["name"],
                         "date": fx["fixture"]["date"][:10]})
     return out
@@ -110,7 +112,8 @@ def fd_results(days_back=6):
         t = sc.get("regularTime") or sc.get("fullTime") or {}
         if t.get("home") is None:
             continue
-        out.append({"fdId": m["id"], "hg": int(t["home"]), "ag": int(t["away"])})
+        hh = sc.get("halfTime") or {}
+        out.append({"fdId": m["id"], "hg": int(t["home"]), "ag": int(t["away"]), "hthg": hh.get("home"), "htag": hh.get("away")})
     return out
 
 
@@ -128,8 +131,9 @@ def fill(arch, api_res=(), fd_res=(), hist=None):
     by_fd = {r["fdId"]: r for r in fd_res}
     n = 0
     for m in arch["matches"]:
-        need_corners = bool(m.get("result")) and m.get("result", {}).get("hc") is None and \
-            any(p["k"].startswith("C") for p in m.get("picks") or [])
+        need_corners = bool(m.get("result")) and (
+            (m["result"].get("hc") is None and any(p["k"][0] in "CK" for p in m.get("picks") or []))
+            or (m["result"].get("hthg") is None and any(p["k"][0] == "H" and p["k"][1] in "OU" for p in m.get("picks") or [])))
         if m.get("result") and not need_corners:
             continue
         row = _hist_row(m, hist)
@@ -143,9 +147,13 @@ def fill(arch, api_res=(), fd_res=(), hist=None):
                 r = {"hg": int(row["hg"]), "ag": int(row["ag"])}
             if r:
                 m["result"] = {"hg": r["hg"], "ag": r["ag"]}
-        if m.get("result") and row is not None and pd.notna(row.get("hc")) and pd.notna(row.get("ac")):
-            m["result"]["hc"], m["result"]["ac"] = int(row["hc"]), int(row["ac"])
-            r = r or True
+                if r.get("hthg") is not None and r.get("htag") is not None:
+                    m["result"]["hthg"], m["result"]["htag"] = int(r["hthg"]), int(r["htag"])
+        if m.get("result") and row is not None:
+            for a_, b_ in (("hc", "ac"), ("hthg", "htag"), ("hy", "ay"), ("hr", "ar")):
+                if m["result"].get(a_) is None and pd.notna(row.get(a_)) and pd.notna(row.get(b_)):
+                    m["result"][a_], m["result"][b_] = int(row[a_]), int(row[b_])
+                    r = r or True
         if r:
             m["eval"] = evaluate(m)
             n += 1
@@ -199,7 +207,20 @@ def settle(v, hg, ag):
     return round(o - 1, 3) if win else -1.0
 
 
-def pick_won(k, hg, ag, hc=None, ac=None):
+def pick_won(k, hg, ag, hc=None, ac=None, res=None):
+    res = res or {}
+    if k[0] == "H" and len(k) > 1 and k[1] in "OU":
+        if res.get("hthg") is None:
+            return None
+        t1 = res["hthg"] + res["htag"]
+        line = int(k[2:]) / 10
+        return t1 > line if k[1] == "O" else t1 < line
+    if k[0] == "K":
+        if res.get("hy") is None:
+            return None
+        cards = res["hy"] + res["ay"] + (res.get("hr") or 0) + (res.get("ar") or 0)
+        line = int(k[2:]) / 10
+        return cards > line if k[1] == "O" else cards < line
     tot = hg + ag
     rules = {"H": hg > ag, "D": hg == ag, "A": hg < ag, "1X": hg >= ag, "X2": hg <= ag, "12": hg != ag,
              "O15": tot > 1.5, "U15": tot < 1.5, "O25": tot > 2.5, "U25": tot < 2.5, "O35": tot > 3.5, "U35": tot < 3.5,
@@ -229,7 +250,7 @@ def evaluate(m):
     ev["value"] = vals
     pk = []
     for p in m.get("picks") or []:
-        w = pick_won(p["k"], hg, ag, m["result"].get("hc"), m["result"].get("ac"))
+        w = pick_won(p["k"], hg, ag, m["result"].get("hc"), m["result"].get("ac"), m["result"])
         pk.append({"k": p["k"], "g": p["g"], "p": p["p"], "won": w})
     ev["picks"] = pk
     return ev

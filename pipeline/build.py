@@ -15,6 +15,7 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import corners as cn  # noqa: E402
+import extras as ex  # noqa: E402
 import results as res  # noqa: E402
 import stats as st  # noqa: E402
 from config import ALL_COMPS, CUPS, DAYS_AHEAD, DERBIES, LEAGUE_STRENGTH, LEAGUES, MODEL, VALUE  # noqa: E402
@@ -100,10 +101,13 @@ def main(offline=False):
     load_user_aliases()
     cur = season_start_year()
     hist = load_history()
+    hist["hcards"] = hist["hy"] + hist["hr"].fillna(0)
+    hist["acards"] = hist["ay"] + hist["ar"].fillna(0)
     ref = pd.Timestamp(NOW.date())
 
     # ---------- Modelle je Liga
     models, team_comp, tables, league_avgs, cur_of, corner_models = {}, {}, {}, {}, {}, {}
+    card_models, ht_ratios, sims = {}, {}, {}
     for comp in LEAGUES:
         df = hist[hist["comp"] == comp]
         if df.empty:
@@ -119,6 +123,17 @@ def main(offline=False):
                 cmod = cn.CornerModel(df, cs)
                 if cmod.ok:
                     corner_models[comp] = cmod
+            if cn.has_corners(df, hcol="hcards"):
+                kmod = cn.CornerModel(df, cs, "hcards", "acards")
+                if kmod.ok:
+                    card_models[comp] = kmod
+            ht_ratios[comp] = ex.ht_ratio(df[df["season"] >= cs - 2])
+            try:
+                sim = ex.simulate_season(models[comp], cur_df)
+                if sim:
+                    sims[comp] = sim
+            except Exception as e:  # noqa: BLE001
+                log(f"Simulation {comp}: {e}")
         except Exception as e:  # noqa: BLE001
             log(f"Modell {comp}: {e}")
             continue
@@ -301,6 +316,15 @@ def main(offline=False):
             if odds:
                 rec["odds"] = odds
                 rec["value"] = _value(mk, m, odds)
+                prev_m = previous.get(mid) or {}
+                keys = ("H", "D", "A", "O25", "U25")
+                rec["oddsOpen"] = prev_m.get("oddsOpen") or {k: odds[k] for k in keys if odds.get(k)}
+                if prev_m.get("odds"):
+                    rec["oddsPrev"] = {k: prev_m["odds"][k] for k in keys if prev_m["odds"].get(k)}
+            # Halbzeit
+            hc_ = (h or {}).get("comp") if comp in CUPS else comp
+            rh, ra, _ok = ht_ratios.get(hc_, (0.44, 0.44, False))
+            rec["ht"] = ex.halftime(lh, la, rh, ra)
             rec["tip"] = _tip(mk)
         # Eckbälle
         try:
@@ -313,8 +337,23 @@ def main(offline=False):
             if rec.get("teams"):
                 rec["teams"]["home"]["corners"] = cblock["home"]
                 rec["teams"]["away"]["corners"] = cblock["away"]
+        # Karten
+        try:
+            kblock = _corners(comp, h, a, hname, aname, card_models, hist, cur_of, cards=True)
+        except Exception as e:  # noqa: BLE001
+            kblock = None
+            log(f"Karten {fx['home']}-{fx['away']}: {e}")
+        if kblock:
+            rec["cards"] = kblock["markets"]
+            if rec.get("teams"):
+                rec["teams"]["home"]["cards"] = kblock["home"]
+                rec["teams"]["away"]["cards"] = kblock["away"]
+        if rec.get("teams") and hname and aname:
+            for side, nm, c_ in (("home", hname, (h or {}).get("comp")), ("away", aname, (a or {}).get("comp"))):
+                if c_ in LEAGUES and side in rec["teams"]:
+                    rec["teams"][side]["last10"] = st.form(hist[hist["comp"] == c_], nm, 10)
         if rec.get("p"):
-            rec["picks"] = _picks(rec["p"], rec.get("corners"), rec.get("odds") or {})
+            rec["picks"] = _picks(rec["p"], rec.get("corners"), rec.get("odds") or {}, rec.get("ht"), rec.get("cards"))
         rec["notes"] = notes
         # Aufstellungen / Verletzungen aus dem letzten Lauf übernehmen
         prev = previous.get(mid)
@@ -344,7 +383,8 @@ def main(offline=False):
     write_json(os.path.join(DATA_DIR, "tables.json"),
                {"generated": NOW.isoformat(), "comps": meta,
                 "tables": {k: v for k, v in tables.items()},
-                "ratings": {k: _ratings(models[k], team_comp) for k in models}})
+                "ratings": {k: _ratings(models[k], team_comp) for k in models},
+                "sims": sims})
     status = {
         "generated": NOW.isoformat(),
         "sources": {
@@ -384,7 +424,7 @@ def _form_factor(mdl, df, team, n=None):
     return att, dfn
 
 
-def _corners(comp, h, a, hname, aname, cms, hist, cur_of):
+def _corners(comp, h, a, hname, aname, cms, hist, cur_of, cards=False):
     if not (hname and aname and h and a):
         return None
     ch, ca = cms.get(h["comp"]), cms.get(a["comp"])
@@ -400,6 +440,10 @@ def _corners(comp, h, a, hname, aname, cms, hist, cur_of):
         r = sum(rs) / len(rs) if rs else None
     dh = hist[hist["comp"] == h["comp"]]
     da = hist[hist["comp"] == a["comp"]]
+    if cards:
+        return {"markets": cn.markets(lh, la, r, cn.CARD_LINES),
+                "home": cn.team_stats(dh, hname, cur_of[h["comp"]], "hcards", "acards", 4.5),
+                "away": cn.team_stats(da, aname, cur_of[a["comp"]], "hcards", "acards", 4.5)}
     return {"markets": cn.markets(lh, la, r),
             "home": cn.team_stats(dh, hname, cur_of[h["comp"]]),
             "away": cn.team_stats(da, aname, cur_of[a["comp"]])}
@@ -408,7 +452,7 @@ def _corners(comp, h, a, hname, aname, cms, hist, cur_of):
 PICK_MIN = 0.60
 
 
-def _picks(p, corners, odds):
+def _picks(p, corners, odds, ht=None, cards=None):
     c = [("H", "1X2", p["1X2"]["H"], odds.get("H")), ("D", "1X2", p["1X2"]["D"], odds.get("D")),
          ("A", "1X2", p["1X2"]["A"], odds.get("A")),
          ("1X", "DC", p["DC"]["1X"], None), ("X2", "DC", p["DC"]["X2"], None), ("12", "DC", p["DC"]["12"], None)]
@@ -423,6 +467,15 @@ def _picks(p, corners, odds):
             k = line.replace(".", "")
             c.append(("CO" + k, "Corners", corners["OU"][line]["O"], None))
             c.append(("CU" + k, "Corners", corners["OU"][line]["U"], None))
+    if ht:
+        c.append(("HO05", "Half", ht["OU"]["0.5"]["O"], None))
+        c.append(("HU15", "Half", ht["OU"]["1.5"]["U"], None))
+        c.append(("HO15", "Half", ht["OU"]["1.5"]["O"], None))
+    if cards:
+        for line in ("3.5", "4.5", "5.5"):
+            k = line.replace(".", "")
+            c.append(("KO" + k, "Cards", cards["OU"][line]["O"], None))
+            c.append(("KU" + k, "Cards", cards["OU"][line]["U"], None))
     out = [{"k": k, "g": g, "p": round(float(pr), 4), "fair": round(1 / float(pr), 2), "odds": o}
            for k, g, pr, o in c if pr >= PICK_MIN]
     out.sort(key=lambda x: -x["p"])
