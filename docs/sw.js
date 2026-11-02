@@ -1,6 +1,6 @@
 /* Offline-Unterstützung: App-Dateien aus dem Cache, Daten immer zuerst frisch aus dem Netz. */
-const CACHE = "kick-predict-v3";
-const SHELL = ["./", "index.html", "style.css", "app.js", "manifest.webmanifest", "icons/icon-192.png"];
+const CACHE = "kick-predict-v4";
+const SHELL = ["./", "index.html", "style.css", "app.js", "i18n.js", "manifest.webmanifest", "icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
