@@ -46,7 +46,8 @@ def _dup(m, lst):
     """Gleiches Spiel unter anderem Namen (z. B. 'SC Braga' / 'Sp Braga')?"""
     for x in lst:
         if x["comp"] == m["comp"] and x["kickoff"][:16] == m["kickoff"][:16] and \
-                (core(x["home"]) == core(m["home"]) or core(x["away"]) == core(m["away"])):
+                (core(x["home"]) == core(m["home"]) or core(x["away"]) == core(m["away"])
+                 or (m.get("hk") and x.get("hk") == m.get("hk"))):
             return True
     return False
 
