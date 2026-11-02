@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import results as res  # noqa: E402
 from sources import ApiFootball  # noqa: E402
 from util import DATA_DIR, read_json, write_json  # noqa: E402
 
@@ -21,9 +22,6 @@ def main():
         print("Keine matches.json – zuerst build.py laufen lassen")
         return
     api = ApiFootball()
-    if not api.ok:
-        print("Kein API_FOOTBALL_KEY – Aufstellungen werden übersprungen")
-        return
     now = datetime.now(timezone.utc)
     changed = 0
     for m in data["matches"]:
@@ -45,6 +43,24 @@ def main():
     if changed:
         data["lineupsUpdated"] = now.isoformat()
         write_json(path, data)
+    # Ergebnisse: Spiele archivieren, Endstände nachtragen
+    try:
+        arch = res.load()
+        added = res.archive_from(data, arch, now)
+        fd_res = res.fd_results(days_back=2)
+        api_res = []
+        late = f"{now.date()}-late"
+        pending = [m for m in arch["matches"] if not m.get("result")
+                   and (now - datetime.fromisoformat(m["kickoff"].replace("Z", "+00:00"))).total_seconds() > 2.2 * 3600]
+        if pending and now.hour >= 21 and arch.get("apiChecked") != late:
+            api_res = res.api_results(api, days_back=0)
+            arch["apiChecked"] = late
+        filled = res.fill(arch, api_res, fd_res)
+        if added or filled:
+            res.save(arch, now.isoformat())
+        print(f"Ergebnisse: {added} archiviert, {filled} eingetragen")
+    except Exception as e:  # noqa: BLE001
+        print(f"Ergebnisse: Fehler {e}")
     print(f"Aufstellungen aktualisiert: {changed} Änderungen, {api.calls} Abrufe, Rest: {api.remaining}")
 
 

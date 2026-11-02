@@ -14,6 +14,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import results as res  # noqa: E402
 import stats as st  # noqa: E402
 from config import ALL_COMPS, CUPS, DAYS_AHEAD, DERBIES, LEAGUE_STRENGTH, LEAGUES, MODEL, VALUE  # noqa: E402
 from history import load_fixture_odds, load_history  # noqa: E402
@@ -171,7 +172,8 @@ def main(offline=False):
         if h and a:
             odds_idx[(o["comp"], h, a)] = o["odds"]
 
-    previous = {m["id"]: m for m in (read_json(os.path.join(DATA_DIR, "matches.json"), {}) or {}).get("matches", [])}
+    prev_data = read_json(os.path.join(DATA_DIR, "matches.json"), {}) or {}
+    previous = {m["id"]: m for m in prev_data.get("matches", [])}
 
     out = []
     odds_budget = int(os.environ.get("ODDS_BUDGET", "15"))
@@ -187,6 +189,7 @@ def main(offline=False):
             "venue": fx.get("venue"), "round": fx.get("round"),
             "apiId": fx.get("apiId"), "fdId": fx.get("fdId"),
             "src": sorted(fx["srcs"]),
+            "hk": hname, "ak": aname,
         }
         dn = derby_name(fx["home"], fx["away"]) or (derby_name(hname, aname) if hname and aname else None)
         rec["derby"] = dn
@@ -302,6 +305,18 @@ def main(offline=False):
                 if prev.get(f):
                     rec[f] = prev[f]
         out.append(rec)
+
+    # ---------- Ergebnisse & Trefferquote
+    try:
+        arch = res.load()
+        added = res.archive_from(prev_data, arch)
+        api_res = [] if offline else res.api_results(api, days_back=1)
+        fd_res = [] if offline else res.fd_results()
+        filled = res.fill(arch, api_res, fd_res, hist)
+        res.save(arch, NOW.isoformat())
+        log(f"Ergebnisse: {added} archiviert, {filled} Endstände eingetragen, {len(arch['matches'])} im Archiv")
+    except Exception as e:  # noqa: BLE001
+        log(f"Ergebnisse: Fehler {e}")
 
     # ---------- Schreiben
     os.makedirs(DATA_DIR, exist_ok=True)

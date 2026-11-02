@@ -36,6 +36,7 @@ async function load(force) {
       fetch("data/tables.json", opt).then((r) => r.json()).catch(() => null),
       fetch("data/status.json", opt).then((r) => r.json()).catch(() => null),
     ]);
+    S.results = await fetch("data/results.json", opt).then((r) => r.json()).catch(() => null);
     S.matches = m.matches || [];
     S.comps = m.comps || {};
     S.generated = m.generated;
@@ -71,6 +72,7 @@ function render() {
   const v = $("#view");
   if (S.tab === "games") v.innerHTML = viewGames();
   else if (S.tab === "value") v.innerHTML = viewValue();
+  else if (S.tab === "results") v.innerHTML = viewResults();
   else if (S.tab === "tables") v.innerHTML = viewTables();
   else v.innerHTML = viewInfo();
   bind(v);
@@ -93,6 +95,7 @@ function bind(root) {
     const k = el.dataset.market; S.markets.has(k) ? S.markets.delete(k) : S.markets.add(k);
     store.set("markets", [...S.markets]); render();
   });
+  root.querySelectorAll("[data-rper]").forEach((el) => el.onclick = () => { S.rPeriod = el.dataset.rper; render(); });
   root.querySelectorAll("[data-tsel]").forEach((el) => el.onchange = () => { S.tableComp = el.value; render(); });
   root.querySelectorAll("[data-tmode]").forEach((el) => el.onclick = () => { S.tableMode = el.dataset.tmode; render(); });
 }
@@ -181,6 +184,60 @@ function viewGames() {
 
 function emptyState() {
   return `<div class="empty"><b>⚽</b>Noch keine Spiele geladen.<br><small>Der GitHub-Roboter füllt die Daten automatisch. Schau unter „Info“ nach dem Status.</small></div>`;
+}
+
+/* ------------------------------------------------------------ Ergebnisse */
+const okBadge = (ok, text) => ok == null ? "" : `<span class="rb ${ok ? "ok" : "bad"}">${ok ? "✓" : "✗"} ${text}</span>`;
+const rate = (r) => (r && r.n ? Math.round((r.ok / r.n) * 100) + "%" : "–");
+
+function viewResults() {
+  const R = S.results;
+  if (!R || !R.matches || !R.matches.length) return `<div class="empty"><b>✅</b>Noch keine ausgewerteten Spiele.<br><small>Sobald Spiele vorbei sind, erscheinen hier die Ergebnisse – grün = Tipp richtig, rot = falsch.</small></div>`;
+  S.rPeriod = S.rPeriod || "7";
+  const sm = (R.summary || {})[S.rPeriod];
+  let html = `<div class="chips">${[["7", "7 Tage"], ["30", "30 Tage"], ["all", "Alle"]].map(([k, l]) => `<button class="chip ${S.rPeriod === k ? "on" : ""}" data-rper="${k}">${l}</button>`).join("")}</div>`;
+  if (sm) {
+    const v = sm.value2 && sm.value2.n ? sm.value2 : sm.value;
+    html += `<div class="grid3">
+      <div class="stat"><small>Tipp 1X2</small><b>${rate(sm.x12)}</b><i>${sm.x12.ok}/${sm.x12.n} richtig</i></div>
+      <div class="stat"><small>Über/Unter 2,5</small><b>${rate(sm.goals)}</b><i>${sm.goals.ok}/${sm.goals.n}</i></div>
+      <div class="stat"><small>Beide treffen</small><b>${rate(sm.btts)}</b><i>${sm.btts.ok}/${sm.btts.n}</i></div></div>`;
+    if (v && v.n) html += `<div class="card row-between" style="margin-top:6px"><span>💎 Value-Tipps${v === sm.value2 ? " (Quote ≥ 2,0)" : ""}<br><small>${v.won} von ${v.n} gewonnen · Einsatz je 1 Einheit</small></span><b class="${v.profit >= 0 ? "src-ok" : "src-bad"}" style="font-size:20px">${v.profit >= 0 ? "+" : ""}${v.profit.toFixed(2)}<br><small>ROI ${(v.roi * 100).toFixed(1)}%</small></b></div>`;
+    const bc = sm.byConf || {};
+    const conf = ["hoch", "mittel", "niedrig"].filter((c) => bc[c]);
+    if (conf.length) html += `<small>Trefferquote nach Sicherheit: ${conf.map((c) => `${c} ${rate(bc[c])} (${bc[c].n})`).join(" · ")}</small>`;
+  }
+  const list = R.matches.filter((m) => vis(m.comp));
+  let lastDay = null;
+  for (const m of list) {
+    const k = dayKey(m.kickoff);
+    if (k !== lastDay) { html += `<div class="group-h"><span>${fmtDay(m.kickoff)}</span></div>`; lastDay = k; }
+    html += resultCard(m);
+  }
+  return html;
+}
+
+function resultCard(m) {
+  const c = S.comps[m.comp] || { flag: "", name: m.comp };
+  const r = m.result, ev = m.eval || {};
+  const tipTxt = m.tip ? m.tip.label : "";
+  const cls = r ? (ev.x12 ? "res-ok" : "res-bad") : "";
+  const score = r ? `<b class="score">${r.hg} : ${r.ag}</b>` : `<small>Ergebnis folgt</small>`;
+  let badges = "";
+  if (r) {
+    badges += okBadge(ev.x12, tipTxt);
+    if ("goals" in ev) badges += okBadge(ev.goals, m.tip.goals);
+    if ("btts" in ev) badges += okBadge(ev.btts, m.tip.btts.replace("Beide treffen: ", "BTTS "));
+    for (const v of ev.value || []) badges += `<span class="rb ${v.profit > 0 ? "ok" : v.profit < 0 ? "bad" : ""}">💎 ${esc(v.label)} @${odd(v.odds)} ${v.profit > 0 ? "+" : ""}${v.profit.toFixed(2)}</span>`;
+  } else if (m.tip) {
+    badges += `<span class="rb">Tipp: ${esc(tipTxt)}</span><span class="rb">${esc(m.tip.goals)}</span>`;
+  }
+  const p = m.p || {};
+  return `<div class="card ${cls}">
+    <div class="m-top"><span>${c.flag} ${esc(c.name)} · ${fmtTime(m.kickoff)}</span>${m.derby ? `<span class="badge derby">🔥 ${esc(m.derby)}</span>` : ""}</div>
+    <div class="teams"><div class="team">${logo(m.homeLogo)}<span>${esc(m.home)}</span></div><div class="xg">${score}</div><div class="team r"><span>${esc(m.away)}</span>${logo(m.awayLogo)}</div></div>
+    <div class="tipline"><span>Prognose 1/X/2: ${pct(p.H)} · ${pct(p.D)} · ${pct(p.A)}</span>${m.xg ? `<span>xG ${m.xg[0].toFixed(1)}:${m.xg[1].toFixed(1)}</span>` : ""}</div>
+    <div class="rbs">${badges}</div></div>`;
 }
 
 /* ------------------------------------------------------------ Value */

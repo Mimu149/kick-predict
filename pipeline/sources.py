@@ -19,6 +19,7 @@ class ApiFootball:
         self.calls = 0
         self.errors = []
         self._last = 0.0
+        self.raw = {}
 
     @property
     def ok(self):
@@ -59,6 +60,7 @@ class ApiFootball:
             resp = self.get("/fixtures", date=d, timezone="UTC")
             if resp is None:
                 continue
+            self.raw[d] = resp
             for fx in resp:
                 comp = API_TO_COMP.get(fx["league"]["id"])
                 if not comp:
