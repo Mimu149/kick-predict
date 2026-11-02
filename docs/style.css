@@ -147,3 +147,4 @@ a { color: var(--away); }
 .rb.ok { background: #10331f; color: var(--home); font-weight: 600; }
 .rb.bad { background: #3a1717; color: var(--bad); font-weight: 600; }
 .tabs button i { font-style: normal; }
+.vrow .edge.mid { color: var(--draw); }

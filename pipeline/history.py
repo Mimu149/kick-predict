@@ -7,7 +7,7 @@ from config import HISTORY_SEASONS, LEAGUES
 from util import CACHE_DIR, csv_text, http_get, log, parse_date, season_code, season_start_year, to_io
 
 BASE = "https://www.football-data.co.uk"
-COLS = ["comp", "season", "date", "home", "away", "hg", "ag"]
+COLS = ["comp", "season", "date", "home", "away", "hg", "ag", "hc", "ac"]
 
 
 def _cached(url, fname, refresh):
@@ -36,6 +36,8 @@ def _parse_main(text, comp, season):
         "away": df["AwayTeam"].astype(str).str.strip(),
         "hg": df["FTHG"].astype(int),
         "ag": df["FTAG"].astype(int),
+        "hc": pd.to_numeric(df["HC"], errors="coerce") if "HC" in df.columns else float("nan"),
+        "ac": pd.to_numeric(df["AC"], errors="coerce") if "AC" in df.columns else float("nan"),
     })
     return out.dropna(subset=["date"])
 
@@ -53,6 +55,8 @@ def _parse_new(text, comp, first_season):
         "away": df["Away"].astype(str).str.strip(),
         "hg": df["HG"].astype(int),
         "ag": df["AG"].astype(int),
+        "hc": float("nan"),
+        "ac": float("nan"),
     })
     return out.dropna(subset=["date"])
 

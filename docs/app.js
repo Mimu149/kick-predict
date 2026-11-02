@@ -7,6 +7,7 @@ const S = {
   day: "all", hidden: new Set(), showLeagues: false,
   minOdds: 2.0, markets: new Set(["1X2", "O/U", "BTTS", "AH"]),
   tableComp: null, tableMode: "table",
+  pickMode: "daily", pickDay: null, pickMin: 0.6, pickOne: true,
 };
 
 const store = {
@@ -48,6 +49,9 @@ async function load(force) {
     S.hidden = new Set(store.get("hidden", []));
     S.minOdds = store.get("minOdds", 2.0);
     S.markets = new Set(store.get("markets", ["1X2", "O/U", "BTTS", "AH"]));
+    S.pickGroups = new Set(store.get("pickGroups", ["1X2", "Goals", "BTTS"]));
+    S.pickMin = store.get("pickMin", 0.6);
+    S.pickOne = store.get("pickOne", true);
     updatedLabel();
   } catch (e) {
     $("#updated").textContent = t("noData");
@@ -92,7 +96,7 @@ window.addEventListener("popstate", () => { if (!$("#sheet").hidden) closeSheet(
 function render() {
   const v = $("#view");
   if (S.tab === "games") v.innerHTML = viewGames();
-  else if (S.tab === "value") v.innerHTML = viewValue();
+  else if (S.tab === "picks") v.innerHTML = S.pickMode === "value" ? pickModeChips() + viewValue() : viewPicks();
   else if (S.tab === "results") v.innerHTML = viewResults();
   else if (S.tab === "tables") v.innerHTML = viewTables();
   else v.innerHTML = viewInfo();
@@ -115,6 +119,14 @@ function bind(root) {
   root.querySelectorAll("[data-market]").forEach((el) => el.onclick = () => {
     const k = el.dataset.market; S.markets.has(k) ? S.markets.delete(k) : S.markets.add(k);
     store.set("markets", [...S.markets]); render();
+  });
+  root.querySelectorAll("[data-pmode]").forEach((el) => el.onclick = () => { S.pickMode = el.dataset.pmode; render(); });
+  root.querySelectorAll("[data-pday]").forEach((el) => el.onclick = () => { S.pickDay = el.dataset.pday; render(); });
+  root.querySelectorAll("[data-pmin]").forEach((el) => el.onclick = () => { S.pickMin = +el.dataset.pmin; store.set("pickMin", S.pickMin); render(); });
+  root.querySelectorAll("[data-pone]").forEach((el) => el.onclick = () => { S.pickOne = !S.pickOne; store.set("pickOne", S.pickOne); render(); });
+  root.querySelectorAll("[data-pgroup]").forEach((el) => el.onclick = () => {
+    const k = el.dataset.pgroup; S.pickGroups.has(k) ? S.pickGroups.delete(k) : S.pickGroups.add(k);
+    store.set("pickGroups", [...S.pickGroups]); render();
   });
   root.querySelectorAll("[data-lang]").forEach((el) => el.onclick = () => setLang(el.dataset.lang));
   root.querySelectorAll("[data-rper]").forEach((el) => el.onclick = () => { S.rPeriod = el.dataset.rper; render(); });
@@ -225,6 +237,8 @@ function viewResults() {
       <div class="stat"><small>${t("ou25")}</small><b>${rate(sm.goals)}</b><i>${sm.goals.ok}/${sm.goals.n}</i></div>
       <div class="stat"><small>${t("btts")}</small><b>${rate(sm.btts)}</b><i>${sm.btts.ok}/${sm.btts.n}</i></div></div>`;
     if (v && v.n) html += `<div class="card row-between" style="margin-top:6px"><span>💎 ${t("valueTips")}${v === sm.value2 ? " " + t("odds2") : ""}<br><small>${t("wonOf", { a: v.won, b: v.n })}</small></span><b class="${v.profit >= 0 ? "src-ok" : "src-bad"}" style="font-size:20px">${v.profit >= 0 ? "+" : ""}${num(v.profit, 2)}<br><small>ROI ${num(v.roi * 100, 1)}%</small></b></div>`;
+    const pk = sm.picks || {};
+    if (pk.all && pk.all.n) html += `<div class="card"><div class="row-between"><span>🎯 ${t("picksStat")}</span><b class="${pk.all.ok / pk.all.n >= 0.6 ? "src-ok" : "src-bad"}" style="font-size:20px">${rate(pk.all)}</b></div><small>${["1X2", "DC", "Goals", "BTTS", "Corners"].filter((g) => pk[g]).map((g) => `${t("g_" + g)} ${rate(pk[g])} (${pk[g].ok}/${pk[g].n})`).join(" · ")}${pk.p70 ? ` · ≥70 %: ${rate(pk.p70)}` : ""}</small></div>`;
     const bc = sm.byConf || {};
     const conf = ["hoch", "mittel", "niedrig"].filter((c) => bc[c]);
     if (conf.length) html += `<small>${t("byConf")}: ${conf.map((c) => `${trConf(c)} ${rate(bc[c])} (${bc[c].n})`).join(" · ")}</small>`;
@@ -250,6 +264,7 @@ function resultCard(m) {
     badges += okBadge(ev.x12, tipTxt);
     if ("goals" in ev) badges += okBadge(ev.goals, trGoals(m.tip.goals));
     if ("btts" in ev) badges += okBadge(ev.btts, trBtts(m.tip.btts, true));
+    for (const p of (ev.picks || []).slice(0, 6)) badges += `<span class="rb ${p.won === true ? "ok" : p.won === false ? "bad" : ""}">🎯 ${esc(t("pk_" + p.k))} ${pct(p.p)}${p.won == null ? " · " + t("pending") : ""}</span>`;
     for (const v of ev.value || []) badges += `<span class="rb ${v.profit > 0 ? "ok" : v.profit < 0 ? "bad" : ""}">💎 ${esc(trLabel(v.label))} @${odd(v.odds)} ${v.profit > 0 ? "+" : ""}${num(v.profit, 2)}</span>`;
   } else if (m.tip) {
     badges += `<span class="rb">${t("tip")}: ${esc(tipTxt)}</span><span class="rb">${esc(trGoals(m.tip.goals))}</span>`;
@@ -260,6 +275,50 @@ function resultCard(m) {
     <div class="teams"><div class="team">${logo(m.homeLogo)}<span>${esc(m.home)}</span></div><div class="xg">${score}</div><div class="team r"><span>${esc(m.away)}</span>${logo(m.awayLogo)}</div></div>
     <div class="tipline"><span>${t("forecast")}: ${pct(p.H)} · ${pct(p.D)} · ${pct(p.A)}</span>${m.xg ? `<span>xG ${num(m.xg[0], 1)}:${num(m.xg[1], 1)}</span>` : ""}</div>
     <div class="rbs">${badges}</div></div>`;
+}
+
+/* ------------------------------------------------------------ Daily Picks */
+function pickModeChips() {
+  return `<div class="chips"><button class="chip ${S.pickMode === "daily" ? "on" : ""}" data-pmode="daily">🎯 ${t("dailyPicks")}</button><button class="chip ${S.pickMode === "value" ? "on" : ""}" data-pmode="value">💎 ${t("value")}</button></div>`;
+}
+
+function viewPicks() {
+  let html = pickModeChips();
+  const days = [...new Set(S.matches.filter((m) => m.picks && m.picks.length).map((m) => dayKey(m.kickoff)))];
+  if (!days.length) return html + `<div class="empty"><b>🎯</b>${t("noPicks")}</div>`;
+  if (!S.pickDay || (S.pickDay !== "all" && !days.includes(S.pickDay))) S.pickDay = days[0];
+  const today = dayKey(new Date()), tomorrow = dayKey(Date.now() + 864e5);
+  const dl = (k) => k === today ? t("today") : k === tomorrow ? t("tomorrow")
+    : dt(S.matches.find((x) => dayKey(x.kickoff) === k).kickoff).toLocaleDateString(loc(), { weekday: "short", day: "2-digit", month: "2-digit" });
+  html += `<div class="chips">${days.map((k) => `<button class="chip ${S.pickDay === k ? "on" : ""}" data-pday="${k}">${dl(k)}</button>`).join("")}<button class="chip ${S.pickDay === "all" ? "on" : ""}" data-pday="all">${t("allDays")}</button></div>`;
+  html += `<div class="chips">${[0.6, 0.65, 0.7, 0.75, 0.8].map((x) => `<button class="chip ${S.pickMin === x ? "on" : ""}" data-pmin="${x}">${t("minProb", { x: Math.round(x * 100) })}</button>`).join("")}</div>`;
+  html += `<div class="chips">${["1X2", "DC", "Goals", "BTTS", "Corners"].map((g) => `<button class="chip ${S.pickGroups.has(g) ? "on" : ""}" data-pgroup="${g}">${t("g_" + g)}</button>`).join("")}<button class="chip ${S.pickOne ? "on" : ""}" data-pone="1">${S.pickOne ? t("onePer") : t("allPicks")}</button></div>`;
+  const rows = [];
+  for (const m of S.matches) {
+    if (!vis(m.comp) || !m.picks) continue;
+    if (S.pickDay !== "all" && dayKey(m.kickoff) !== S.pickDay) continue;
+    let ps = m.picks.filter((p) => p.p >= S.pickMin && S.pickGroups.has(p.g));
+    if (S.pickOne) ps = ps.slice(0, 1);
+    for (const p of ps) rows.push({ m, p });
+  }
+  rows.sort((a, b) => b.p.p - a.p.p);
+  const sm = S.results && S.results.summary && S.results.summary.all;
+  const ph = sm && sm.picks && sm.picks.all;
+  html += `<div class="info-note">${t("picksExplain", { x: Math.round(S.pickMin * 100) })}${ph && ph.n ? "<br><b>" + t("picksHit", { r: rate(ph), a: ph.ok, b: ph.n }) + "</b>" : ""}</div>`;
+  if (S.pickGroups.has("Corners")) html += `<div class="note">${t("cornersWeak")}</div>`;
+  if (!rows.length) return html + `<div class="empty"><b>🎯</b>${t("noPicks")}</div>`;
+  for (const { m, p } of rows) {
+    const c = S.comps[m.comp] || { flag: "" };
+    const val = p.odds && p.odds * p.p > 1;
+    html += `<div class="card match" data-match="${esc(m.id)}"><div class="vrow">
+      <div><b>${esc(t("pk_" + p.k))}</b><div class="sub">${c.flag} ${esc(m.home)} – ${esc(m.away)}</div>
+      <div class="sub">${S.pickDay === "all" ? fmtDay(m.kickoff) + ", " : ""}${fmtTime(m.kickoff)}${m.derby ? " · 🔥 " + esc(m.derby) : ""}</div></div>
+      <div class="edge ${p.p >= 0.75 ? "" : "mid"}">${pct(p.p)}</div>
+      <div class="sub">${t("fairOdds")} <b>${odd(p.fair)}</b></div>
+      <div class="sub" style="text-align:right">${p.odds ? `${t("odds")} <b>${odd(p.odds)}</b>${val ? " 💎" : ""}` : ""}</div>
+    </div></div>`;
+  }
+  return html + `<p class="info-note">${t("noModelSafe")}</p>`;
 }
 
 /* ------------------------------------------------------------ Value */
@@ -370,7 +429,7 @@ function renderDetail(m) {
   const T = m.teams || {};
   const posH = T.home && T.home.pos ? `${t("place", { n: T.home.pos })}` : T.home && T.home.league ? esc(T.home.league) : "";
   const posA = T.away && T.away.pos ? `${t("place", { n: T.away.pos })}` : T.away && T.away.league ? esc(T.away.league) : "";
-  const tabs = ["pred", "form", "h2h", "stats", "lineup"].map((k) => [k, t("d_" + k)]);
+  const tabs = ["pred", "form", "h2h", "stats", "corners", "lineup"].map((k) => [k, t("d_" + k)]);
   let html = `<div class="d-head"><small>${c.flag} ${esc(c.name)}${m.round ? " · " + esc(m.round) : ""}</small>
     ${m.derby ? `<div style="margin-top:6px"><span class="badge derby">🔥 ${esc(m.derby)}</span></div>` : ""}
     <div class="vs"><div class="t">${logo(m.homeLogo)}${esc(m.home)}<small>${posH}</small></div>
@@ -388,6 +447,7 @@ function detailBody(m) {
   if (detailTab === "form") return dForm(m);
   if (detailTab === "h2h") return dH2H(m);
   if (detailTab === "stats") return dStats(m);
+  if (detailTab === "corners") return dCorners(m);
   return dLineup(m);
 }
 
@@ -493,6 +553,34 @@ function dStats(m) {
   }
   if (T.home.rating && T.away.rating) {
     h += `<h3>${t("modelVals")}</h3><div class="grid2"><div class="stat"><small>${esc(m.home)}</small><i>${t("attack")} ${sgn(T.home.rating.att)}${num(T.home.rating.att * 100, 0)}% · ${t("defence")} ${sgn(T.home.rating.def)}${num(T.home.rating.def * 100, 0)}% ${t("concededL")}</i></div><div class="stat"><small>${esc(m.away)}</small><i>${t("attack")} ${sgn(T.away.rating.att)}${num(T.away.rating.att * 100, 0)}% · ${t("defence")} ${sgn(T.away.rating.def)}${num(T.away.rating.def * 100, 0)}% ${t("concededL")}</i></div></div>`;
+  }
+  return h;
+}
+
+function cornerRec(title, r) {
+  if (!r) return "";
+  return `<div class="stat" style="text-align:left"><small>${title} · ${t("games_s", { n: r.n })}</small><b>${num(r.for, 1)} : ${num(r.against, 1)}</b><i>${t("cornersTotal")} Ø ${num(r.total, 1)} · ${t("o95share")} ${r.o95}%</i></div>`;
+}
+
+function dCorners(m) {
+  const c = m.corners, T = m.teams || {};
+  const ch = T.home && T.home.corners, ca = T.away && T.away.corners;
+  if (!c && !ch && !ca) return `<div class="empty"><b>🚩</b>${t("noCorners")}</div>`;
+  let h = "";
+  if (c) {
+    h += `<div class="grid3"><div class="stat"><small>${esc(m.home)}</small><b>${num(c.exp[0], 1)}</b></div><div class="stat"><small>${t("expCorners")}</small><b>${num(c.total, 1)}</b></div><div class="stat"><small>${esc(m.away)}</small><b>${num(c.exp[1], 1)}</b></div></div>`;
+    h += `<h3>${t("moreCorners")}</h3><div class="bar"><div class="h" style="flex:${c.more.H}">${pct(c.more.H)}</div><div class="d" style="flex:${c.more.E}">${pct(c.more.E)}</div><div class="a" style="flex:${c.more.A}">${pct(c.more.A)}</div></div>
+      <div class="row-between" style="font-size:12px;color:var(--muted);margin-top:4px"><span>${esc(m.home)}</span><span>${t("equal")}</span><span>${esc(m.away)}</span></div>`;
+    h += `<h3>${t("cornersOU")}</h3><div class="card"><table><tr><th>${t("line")}</th><th>${t("over")}</th><th>${t("fairQ")}</th><th>${t("under")}</th><th>${t("fairQ")}</th></tr>${Object.entries(c.OU)
+      .map(([l, v]) => `<tr class="${l === "9.5" ? "hl" : ""}"><td>${num(l, 1)}</td><td>${pct(v.O)}</td><td>${fair(v.O)}</td><td>${pct(v.U)}</td><td>${fair(v.U)}</td></tr>`).join("")}</table></div>`;
+    h += `<div class="note">${t("cornersWeak")}</div>`;
+  }
+  h += `<h3>${t("cornersFor")} : ${t("cornersAgainst")} · ${t("thisSeason")}</h3><div class="grid2">${cornerRec(t("cornersHomeT", { t: esc(m.home) }), ch && ch.season && ch.season.home)}${cornerRec(t("cornersAwayT", { t: esc(m.away) }), ca && ca.season && ca.season.away)}</div>`;
+  h += `<h3>${t("cornersFor")} : ${t("cornersAgainst")} · ${t("last5y")}</h3><div class="grid2">${cornerRec(t("cornersHomeT", { t: esc(m.home) }), ch && ch.all && ch.all.home)}${cornerRec(t("cornersAwayT", { t: esc(m.away) }), ca && ca.all && ca.all.away)}</div>`;
+  h += `<div class="grid2" style="margin-top:6px">${cornerRec(t("cornersAwayT", { t: esc(m.home) }), ch && ch.all && ch.all.away)}${cornerRec(t("cornersHomeT", { t: esc(m.away) }), ca && ca.all && ca.all.home)}</div>`;
+  for (const [x, name] of [[ch, m.home], [ca, m.away]]) {
+    if (!x || !x.last || !x.last.length) continue;
+    h += `<h3>${t("lastCorners", { t: esc(name) })}</h3><div class="card">${x.last.map((i) => `<div class="formrow"><small>${fmtShort(i.d)}</small><span class="opp">${i.v === "H" ? "vs" : "@"} ${esc(i.opp)}</span><span class="sc">${i.cf}:${i.ca}</span></div>`).join("")}</div>`;
   }
   return h;
 }

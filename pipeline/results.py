@@ -62,6 +62,8 @@ def snapshot(m):
         "p": {"H": p["1X2"]["H"], "D": p["1X2"]["D"], "A": p["1X2"]["A"],
               "O25": p["OU"]["2.5"]["O"], "BTTS": p["BTTS"]["Y"]},
         "value": [v for v in (m.get("value") or []) if v.get("isValue")],
+        "picks": (m.get("picks") or [])[:12],
+        "xc": (m.get("corners") or {}).get("total"),
         "result": None,
     }
 
@@ -112,26 +114,39 @@ def fd_results(days_back=6):
     return out
 
 
+def _hist_row(m, hist):
+    if hist is None or not m.get("hk") or not m.get("ak"):
+        return None
+    d = pd.Timestamp(m["kickoff"][:10])
+    g = hist[(hist["comp"] == m["comp"]) & (hist["home"] == m["hk"]) & (hist["away"] == m["ak"])
+             & ((hist["date"] - d).abs() <= pd.Timedelta(days=1))]
+    return g.iloc[0] if len(g) else None
+
+
 def fill(arch, api_res=(), fd_res=(), hist=None):
     by_api = {r["apiId"]: r for r in api_res}
     by_fd = {r["fdId"]: r for r in fd_res}
     n = 0
     for m in arch["matches"]:
-        if m.get("result"):
+        need_corners = bool(m.get("result")) and m.get("result", {}).get("hc") is None and \
+            any(p["k"].startswith("C") for p in m.get("picks") or [])
+        if m.get("result") and not need_corners:
             continue
+        row = _hist_row(m, hist)
         r = None
-        if m.get("apiId") in by_api:
-            r = by_api[m["apiId"]]
-        elif m.get("fdId") in by_fd:
-            r = by_fd[m["fdId"]]
-        elif hist is not None and m.get("hk") and m.get("ak"):
-            d = pd.Timestamp(m["kickoff"][:10])
-            g = hist[(hist["comp"] == m["comp"]) & (hist["home"] == m["hk"]) & (hist["away"] == m["ak"])
-                     & ((hist["date"] - d).abs() <= pd.Timedelta(days=1))]
-            if len(g):
-                r = {"hg": int(g.iloc[0]["hg"]), "ag": int(g.iloc[0]["ag"])}
+        if not m.get("result"):
+            if m.get("apiId") in by_api:
+                r = by_api[m["apiId"]]
+            elif m.get("fdId") in by_fd:
+                r = by_fd[m["fdId"]]
+            elif row is not None:
+                r = {"hg": int(row["hg"]), "ag": int(row["ag"])}
+            if r:
+                m["result"] = {"hg": r["hg"], "ag": r["ag"]}
+        if m.get("result") and row is not None and pd.notna(row.get("hc")) and pd.notna(row.get("ac")):
+            m["result"]["hc"], m["result"]["ac"] = int(row["hc"]), int(row["ac"])
+            r = r or True
         if r:
-            m["result"] = {"hg": r["hg"], "ag": r["ag"]}
             m["eval"] = evaluate(m)
             n += 1
     return n
@@ -184,6 +199,19 @@ def settle(v, hg, ag):
     return round(o - 1, 3) if win else -1.0
 
 
+def pick_won(k, hg, ag, hc=None, ac=None):
+    tot = hg + ag
+    rules = {"H": hg > ag, "D": hg == ag, "A": hg < ag, "1X": hg >= ag, "X2": hg <= ag, "12": hg != ag,
+             "O15": tot > 1.5, "U15": tot < 1.5, "O25": tot > 2.5, "U25": tot < 2.5, "O35": tot > 3.5, "U35": tot < 3.5,
+             "BTTSY": hg > 0 and ag > 0, "BTTSN": not (hg > 0 and ag > 0)}
+    if k in rules:
+        return rules[k]
+    if k.startswith("C") and hc is not None and ac is not None:
+        line = int(k[2:]) / 10
+        return (hc + ac > line) if k[1] == "O" else (hc + ac < line)
+    return None
+
+
 def evaluate(m):
     hg, ag = m["result"]["hg"], m["result"]["ag"]
     actual = "H" if hg > ag else ("D" if hg == ag else "A")
@@ -199,6 +227,11 @@ def evaluate(m):
         if pr is not None:
             vals.append({"label": v["label"], "odds": v["odds"], "profit": pr})
     ev["value"] = vals
+    pk = []
+    for p in m.get("picks") or []:
+        w = pick_won(p["k"], hg, ag, m["result"].get("hc"), m["result"].get("ac"))
+        pk.append({"k": p["k"], "g": p["g"], "p": p["p"], "won": w})
+    ev["picks"] = pk
     return ev
 
 
@@ -221,7 +254,16 @@ def summary(arch, days):
             b = by_conf.setdefault(c, {"ok": 0, "n": 0})
             b["n"] += 1
             b["ok"] += int(m["eval"]["x12"])
-    return {"days": days, "matches": len(done), "x12": rate("x12"), "goals": rate("goals"), "btts": rate("btts"),
+    picks = {}
+    for m in done:
+        for p in m["eval"].get("picks", []):
+            if p["won"] is None:
+                continue
+            for key in ("all", p["g"], "p70" if p["p"] >= 0.7 else "p60"):
+                b = picks.setdefault(key, {"ok": 0, "n": 0})
+                b["n"] += 1
+                b["ok"] += int(p["won"])
+    return {"days": days, "matches": len(done), "picks": picks, "x12": rate("x12"), "goals": rate("goals"), "btts": rate("btts"),
             "byConf": by_conf,
             "value": {"n": len(vals), "won": sum(v["profit"] > 0 for v in vals), "profit": round(prof, 2),
                       "roi": round(prof / len(vals), 4) if vals else None},

@@ -14,6 +14,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import corners as cn  # noqa: E402
 import results as res  # noqa: E402
 import stats as st  # noqa: E402
 from config import ALL_COMPS, CUPS, DAYS_AHEAD, DERBIES, LEAGUE_STRENGTH, LEAGUES, MODEL, VALUE  # noqa: E402
@@ -102,7 +103,7 @@ def main(offline=False):
     ref = pd.Timestamp(NOW.date())
 
     # ---------- Modelle je Liga
-    models, team_comp, tables, league_avgs, cur_of = {}, {}, {}, {}, {}
+    models, team_comp, tables, league_avgs, cur_of, corner_models = {}, {}, {}, {}, {}, {}
     for comp in LEAGUES:
         df = hist[hist["comp"] == comp]
         if df.empty:
@@ -114,6 +115,10 @@ def main(offline=False):
         promoted = [t for t in set(cur_df["home"]) | set(cur_df["away"]) if t not in prev_teams]
         try:
             models[comp] = LeagueModel(comp).fit(df, ref, promoted)
+            if cn.has_corners(df):
+                cmod = cn.CornerModel(df, cs)
+                if cmod.ok:
+                    corner_models[comp] = cmod
         except Exception as e:  # noqa: BLE001
             log(f"Modell {comp}: {e}")
             continue
@@ -297,6 +302,19 @@ def main(offline=False):
                 rec["odds"] = odds
                 rec["value"] = _value(mk, m, odds)
             rec["tip"] = _tip(mk)
+        # Eckbälle
+        try:
+            cblock = _corners(comp, h, a, hname, aname, corner_models, hist, cur_of)
+        except Exception as e:  # noqa: BLE001
+            cblock = None
+            log(f"Ecken {fx['home']}-{fx['away']}: {e}")
+        if cblock:
+            rec["corners"] = cblock["markets"]
+            if rec.get("teams"):
+                rec["teams"]["home"]["corners"] = cblock["home"]
+                rec["teams"]["away"]["corners"] = cblock["away"]
+        if rec.get("p"):
+            rec["picks"] = _picks(rec["p"], rec.get("corners"), rec.get("odds") or {})
         rec["notes"] = notes
         # Aufstellungen / Verletzungen aus dem letzten Lauf übernehmen
         prev = previous.get(mid)
@@ -364,6 +382,51 @@ def _form_factor(mdl, df, team, n=None):
     att = min(1.18, max(0.85, (gf + c) / (egf + c)))
     dfn = min(1.18, max(0.85, (ga + c) / (ega + c)))
     return att, dfn
+
+
+def _corners(comp, h, a, hname, aname, cms, hist, cur_of):
+    if not (hname and aname and h and a):
+        return None
+    ch, ca = cms.get(h["comp"]), cms.get(a["comp"])
+    if not (ch and ca and ch.has(hname) and ca.has(aname)):
+        return None
+    if comp in LEAGUES and ch is ca:
+        lh, la = ch.expect(hname, aname)
+        r = ch.r
+    else:  # Europapokal: Teams aus verschiedenen Ligen
+        lh = ch.abs_home(hname)[0] * ca.teams[aname]["aa"]
+        la = ca.abs_away(aname)[0] * ch.teams[hname]["ha"]
+        rs = [x for x in (ch.r, ca.r) if x]
+        r = sum(rs) / len(rs) if rs else None
+    dh = hist[hist["comp"] == h["comp"]]
+    da = hist[hist["comp"] == a["comp"]]
+    return {"markets": cn.markets(lh, la, r),
+            "home": cn.team_stats(dh, hname, cur_of[h["comp"]]),
+            "away": cn.team_stats(da, aname, cur_of[a["comp"]])}
+
+
+PICK_MIN = 0.60
+
+
+def _picks(p, corners, odds):
+    c = [("H", "1X2", p["1X2"]["H"], odds.get("H")), ("D", "1X2", p["1X2"]["D"], odds.get("D")),
+         ("A", "1X2", p["1X2"]["A"], odds.get("A")),
+         ("1X", "DC", p["DC"]["1X"], None), ("X2", "DC", p["DC"]["X2"], None), ("12", "DC", p["DC"]["12"], None)]
+    for line in ("1.5", "2.5", "3.5"):
+        k = line.replace(".", "")
+        c.append(("O" + k, "Goals", p["OU"][line]["O"], odds.get("O25") if line == "2.5" else None))
+        c.append(("U" + k, "Goals", p["OU"][line]["U"], odds.get("U25") if line == "2.5" else None))
+    c.append(("BTTSY", "BTTS", p["BTTS"]["Y"], odds.get("BTTSY")))
+    c.append(("BTTSN", "BTTS", p["BTTS"]["N"], odds.get("BTTSN")))
+    if corners:
+        for line in ("8.5", "9.5", "10.5"):
+            k = line.replace(".", "")
+            c.append(("CO" + k, "Corners", corners["OU"][line]["O"], None))
+            c.append(("CU" + k, "Corners", corners["OU"][line]["U"], None))
+    out = [{"k": k, "g": g, "p": round(float(pr), 4), "fair": round(1 / float(pr), 2), "odds": o}
+           for k, g, pr, o in c if pr >= PICK_MIN]
+    out.sort(key=lambda x: -x["p"])
+    return out
 
 
 def _side_block(df, team, cur, table):
