@@ -136,6 +136,11 @@ function bind(root) {
     const k = el.dataset.pgroup; S.pickGroups.has(k) ? S.pickGroups.delete(k) : S.pickGroups.add(k);
     store.set("pickGroups", [...S.pickGroups]); render();
   });
+  root.querySelectorAll("[data-theme-set]").forEach((el) => el.onclick = () => {
+    document.documentElement.dataset.theme = el.dataset.themeSet; store.set("theme", el.dataset.themeSet);
+    const mt = document.querySelector('meta[name="theme-color"]'); if (mt) mt.content = el.dataset.themeSet === "light" ? "#eef2f7" : "#0e1726";
+    render();
+  });
   root.querySelectorAll("[data-lang]").forEach((el) => el.onclick = () => setLang(el.dataset.lang));
   root.querySelectorAll("[data-rper]").forEach((el) => el.onclick = () => { S.rPeriod = el.dataset.rper; render(); });
   root.querySelectorAll("[data-tsel]").forEach((el) => el.onchange = () => { S.tableComp = el.value; render(); });
@@ -191,9 +196,7 @@ function matchCard(m) {
     vb.length ? `<span class="badge value">💎 Value</span>` : "",
     m.lineups ? `<span class="badge lineup">📋 ${t("lineupBadge")}</span>` : "",
   ].join("");
-  const bar = p
-    ? `<div class="bar"><div class="h" style="flex:${p.H}">${pct(p.H)}</div><div class="d" style="flex:${p.D}">${pct(p.D)}</div><div class="a" style="flex:${p.A}">${pct(p.A)}</div></div>`
-    : `<div class="info-note">${t("noPred")}</div>`;
+  const bar = probTiles(m) + (p ? "" : `<div class="info-note">${t("noPred")}</div>`);
   const tip = m.tip
     ? `<div class="tipline"><span>${t("tip")}: <b class="conf-${m.tip.conf}">${esc(trPick(m.tip.pick))}</b></span><span>${esc(trGoals(m.tip.goals))} · ${pct(m.tip.goalsP)}</span></div>`
     : "";
@@ -201,9 +204,21 @@ function matchCard(m) {
     <div class="m-top"><span><button class="star ${FAVS.has(m.id) ? "on" : ""}" data-fav="${esc(m.id)}">${FAVS.has(m.id) ? "★" : "☆"}</button>${c.flag} ${esc(c.name)} · ${fmtTime(m.kickoff)}</span><span class="badges">${badges}</span></div>
     <div class="teams">
       <div class="team">${logo(m.homeLogo)}<span>${esc(m.home)}</span></div>
-      <div class="xg">${m.xg ? `<b>${num(m.xg[0], 1)} : ${num(m.xg[1], 1)}</b><br>xG` : "vs"}</div>
+      <div class="xg">${m.xg ? `<b>${num(m.xg[0], 1)} : ${num(m.xg[1], 1)}</b>xG` : `<b>${fmtTime(m.kickoff)}</b>`}</div>
       <div class="team r"><span>${esc(m.away)}</span>${logo(m.awayLogo)}</div>
-    </div>${bar}${tip}${quickRow(m)}</div>`;
+    </div>${bar}${tip}</div>`;
+}
+
+function probTiles(m) {
+  const o = m.odds || {}, p = (m.p && m.p["1X2"]) || {};
+  const best = p.H != null ? ["H", "D", "A"].reduce((a, b) => (p[b] > p[a] ? b : a)) : null;
+  const tile = (k, lbl, cls) => {
+    const od = o[k] || (p[k] ? 1 / p[k] : null);
+    const v = p[k] != null ? `${Math.round(p[k] * 100)}<small>%</small>` : "–";
+    return `<button class="pt ${cls} ${best === k ? "fav" : ""}" style="--w:${p[k] ? Math.round(p[k] * 100) : 0}%" data-add="${esc(m.id)}|${k}" aria-label="${esc(lbl)}">
+      <span class="k">${lbl}</span><span class="v">${v}</span><span class="o">${od ? odd(od) : ""}<em>+</em></span></button>`;
+  };
+  return `<div class="probs">${tile("H", "1", "h")}${tile("D", "X", "d")}${tile("A", "2", "a")}</div>`;
 }
 
 function quickRow(m) {
@@ -409,7 +424,9 @@ function viewTables() {
 /* ------------------------------------------------------------ Info */
 function viewInfo() {
   const st = S.status;
-  let html = `<h3>${t("language")}</h3><div class="chips">${Object.entries(LANGS).map(([k, l]) => `<button class="chip ${LANG === k ? "on" : ""}" data-lang="${k}">${l.flag} ${l.name}</button>`).join("")}</div>`;
+  const theme = document.documentElement.dataset.theme || "dark";
+  let html = `<h3>${t("theme")}</h3><div class="chips"><button class="chip ${theme === "dark" ? "on" : ""}" data-theme-set="dark">${t("dark")}</button><button class="chip ${theme === "light" ? "on" : ""}" data-theme-set="light">${t("light")}</button></div>`;
+  html += `<h3>${t("language")}</h3><div class="chips">${Object.entries(LANGS).map(([k, l]) => `<button class="chip ${LANG === k ? "on" : ""}" data-lang="${k}">${l.flag} ${l.name}</button>`).join("")}</div>`;
   html += `<h3>${t("dataState")}</h3><div class="card">`;
   html += `<div class="row-between"><span>${t("predsComputed")}</span><b>${S.generated ? fmtShort(S.generated) + " " + fmtTime(S.generated) : "–"}</b></div>`;
   if (S.lineupsUpdated) html += `<div class="row-between"><span>${t("lineups")}</span><b>${fmtTime(S.lineupsUpdated)}</b></div>`;

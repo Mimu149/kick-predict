@@ -9,6 +9,7 @@ const LANGS = {
 
 const I18N = {
   de: {
+    theme: "Darstellung", dark: "🌙 Flutlicht (dunkel)", light: "☀️ Tageslicht (hell)",
     favorites: "Favoriten", favAdd: "Als Favorit markiert ⭐", favRm: "Favorit entfernt", noFavs: "Noch keine Favoriten. Tippe auf ☆ bei einem Spiel.",
     quickAdd: "Zum Kupon hinzufügen", customTip: "Eigener Tipp", customPh: "z. B. Kane trifft, Ecken Bayern > 6 …", addCustom: "＋ Eigenen Tipp hinzufügen",
     customNote: "Eigene Tipps wertest du selbst unter „Meine Wetten“ aus (✓ / ✗).", g_ou: "Ü/U 2,5",
@@ -98,6 +99,7 @@ const I18N = {
     n_cup: "Europapokal: Schätzung über Liga-Modelle (ClubElo nicht verfügbar)",
   },
   en: {
+    theme: "Appearance", dark: "🌙 Floodlight (dark)", light: "☀️ Daylight (light)",
     favorites: "Favourites", favAdd: "Marked as favourite ⭐", favRm: "Favourite removed", noFavs: "No favourites yet. Tap ☆ on a match.",
     quickAdd: "Add to bet slip", customTip: "Custom tip", customPh: "e.g. Kane scores, Bayern corners > 6 …", addCustom: "＋ Add custom tip",
     customNote: "You settle custom tips yourself under “My bets” (✓ / ✗).", g_ou: "O/U 2.5",
@@ -181,6 +183,7 @@ const I18N = {
     n_cup: "European cup: estimate via league models (ClubElo unavailable)",
   },
   tr: {
+    theme: "Görünüm", dark: "🌙 Projektör (koyu)", light: "☀️ Gün ışığı (açık)",
     favorites: "Favoriler", favAdd: "Favorilere eklendi ⭐", favRm: "Favorilerden çıkarıldı", noFavs: "Henüz favori yok. Bir maçta ☆'a dokun.",
     quickAdd: "Kupona ekle", customTip: "Kendi tahminin", customPh: "ör. Kane gol atar, Bayern korner > 6 …", addCustom: "＋ Kendi tahminini ekle",
     customNote: "Kendi tahminlerini „Bahislerim“ altında kendin değerlendirirsin (✓ / ✗).", g_ou: "2,5 A/Ü",
